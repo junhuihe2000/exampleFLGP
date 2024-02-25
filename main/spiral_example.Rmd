@@ -96,12 +96,13 @@ ggplot() + geom_point(aes(X.test[,1],X.test[,2],color=Y_pred_lkflag$test)) +
 
 ```{r}
 t1 = Sys.time()
-Y_pred_skflag = fit_se_regression_gp_rcpp(X.train,Yobs.train,X.test,s,r,K)
+res_pred_skflag = fit_se_regression_gp_rcpp(X.train,Yobs.train,X.test,s,r,K)
 t2 = Sys.time()
 t2 - t1
 ```
 
 ```{r}
+Y_pred_skflag = res_pred_skflag$Y_pred
 sqrt(sum((Y.test-Y_pred_skflag$test)^2)/(n-m))
 ```
 
