@@ -1,0 +1,300 @@
+---
+title: "HCP FMRI"
+author: "He Junhui"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(oro.nifti)
+library(neurobase)
+library(bigmemory)
+library(readxl)
+```
+
+
+```{r}
+pathpre = "G:/Phd/Data/HCPFMRI/WM_contrasts/"
+pathsuf = "_2bk-0bk.nii"
+```
+
+```{r}
+tmp = readnii(paste0(pathpre, "templates/ch2.nii"))
+```
+
+```{r}
+ortho2(tmp)
+```
+
+```{r}
+tmp_img = readnii(paste0(pathpre, "templates/100206", pathsuf))
+img = readnii(paste0(pathpre, "Contrasts/100206", pathsuf))
+img = img[!is.na(img)]
+```
+
+
+
+```{r}
+ortho2(tmp,y=abs(tmp_img)>quantile(abs(img),0.95))
+```
+
+
+
+```{r}
+# read the output csv
+phenotypics = read.csv("G:/Phd/Data/HCPFMRI/HCP_phenotypics_u.csv")
+```
+
+```{r}
+# extract the subjects' indexes
+subjects = phenotypics$Subject
+n = length(subjects)
+idx = c()
+for(i in c(1:n)) {
+  filepath = paste0(pathpre, subjects[i], pathsuf)
+  if(file.exists(filepath)) {
+    idx = c(idx,i)
+  }
+}
+```
+
+```{r}
+idx.sub = cbind(idx, subjects[idx])
+colnames(idx.sub) = c("index", "subject")
+write.csv(idx.sub, "G:/Phd/Data/HCPFMRI/index2bk-0bk.csv", row.names = FALSE)
+```
+
+```{r}
+subjects_used = subjects[idx]
+n_used = length(idx)
+print(n_used)
+```
+
+```{r}
+# read an example of nii
+filepath = paste0(pathpre, subjects_used[1], pathsuf)
+img = readnii(filepath)
+img[is.na(img)] = 0
+img.array = c(img)
+p = length(img.array)
+cat(paste("\nThe Euclidean dimension of the input is",p))
+```
+
+## transform the nii file into the matrix format
+
+```{r}
+t1 = Sys.time()
+```
+
+
+```{r}
+inputdata.bigmatrix = filebacked.big.matrix(nrow=n_used,ncol=p,type="double",backingfile = "2bk-0bk_tem.csv", backingpath = "G:/Phd/Data/HCPFMRI/WM_matrix/")
+```
+
+
+```{r, include=FALSE}
+for(i in c(1:n_used)) {
+  filepath = paste0(pathpre, subjects_used[i], pathsuf)
+  img = readnii(filepath)
+  img[is.na(img)] = 0
+  inputdata.bigmatrix[i,] = c(img)
+  cat(filepath)
+}
+```
+
+```{r}
+write.big.matrix(inputdata.bigmatrix, "G:/Phd/Data/HCPFMRI/WM_matrix/2bk-0bk.csv")
+```
+
+```{r}
+rm(inputdata.bigmatrix)
+gc()
+```
+
+```{r}
+t2 = Sys.time()
+print(t2-t1)
+# Time difference of 15.77086 mins
+```
+
++ AAL region
+
+```{r}
+aal_mni = readnii("G:/Phd/Data/HCPFMRI/AAL_MNI_2mm.nii")
+aal_region = read_excel("G:/Phd/Data/HCPFMRI/AALregion_full.xls")
+```
+
+```{r}
+aal_frontal = aal_region$Code[3:16]
+index_frontal = is.element(aal_mni, aal_frontal)
+```
+
+```{r}
+p = sum(index_frontal)
+p
+```
+
+## extract the Frontal region in FMRI
+
+```{r}
+t1 = Sys.time()
+```
+
+
+```{r}
+frontal.bigmatrix = filebacked.big.matrix(nrow=n_used,ncol=p,type="double",backingfile = "frontal_tem.csv", backingpath = "G:/Phd/Data/HCPFMRI/WM_matrix/")
+```
+
+
+```{r, include=FALSE}
+for(i in c(1:n_used)) {
+  filepath = paste0(pathpre, subjects_used[i], pathsuf)
+  img = readnii(filepath)
+  img[is.na(img)] = 0
+  frontal.bigmatrix[i,] = c(img[index_frontal])
+  cat(filepath)
+}
+```
+
+```{r}
+write.big.matrix(frontal.bigmatrix, "G:/Phd/Data/HCPFMRI/WM_matrix/frontal.csv")
+```
+
+```{r}
+rm(frontal.bigmatrix)
+gc()
+```
+
+```{r}
+t2 = Sys.time()
+print(t2-t1)
+```
+
++ reconstruct
+
++ read 100206 subject
+
+```{r}
+img_100206 = readnii(paste0(pathpre, 100206, pathsuf))
+aal = readnii("G:/Phd/Data/HCPFMRI/AAL_MNI_2mm.nii")
+```
+
+```{r}
+dims = dim(img_100206)
+domains = !is.na(img_100206)
+n = sum(domains)
+```
+
+```{r}
+data = matrix(NA,n,5)
+colnames(data) = c("x1","x2", "x3", "y", "Code")
+idx = 1
+for(i in 1:dims[1]) {
+  for(j in 1:dims[2]) {
+    for(k in 1:dims[3]) {
+      if(domains[i,j,k]) {
+        data[idx,] = c(i,j,k,img_100206[i,j,k],aal[i,j,k])
+        idx = idx + 1
+      }
+    }
+  }
+}
+```
+
++ coordinate transformation
+
+```{r}
+for(i in 1:3) {
+  data[,i] = (data[,i]-min(data[,i]))/(max(data[,i])-min(data[,i]))
+}
+```
+
+```{r}
+write.csv(data, "G:/Phd/Data/HCPFMRI/2bk-0bk/100206_2bk-0bk.csv", row.names = FALSE)
+```
+
++ read 100307 subject
+
+```{r}
+img_100307 = readnii(paste0(pathpre, 100307, pathsuf))
+aal = readnii("G:/Phd/Data/HCPFMRI/AAL_MNI_2mm.nii")
+```
+
+```{r}
+dims = dim(img_100307)
+domains = !is.na(img_100307)
+n = sum(domains)
+```
+
+```{r}
+data = matrix(NA,n,5)
+colnames(data) = c("x1","x2", "x3", "y", "Code")
+idx = 1
+for(i in 1:dims[1]) {
+  for(j in 1:dims[2]) {
+    for(k in 1:dims[3]) {
+      if(domains[i,j,k]) {
+        data[idx,] = c(i,j,k,img_100307[i,j,k], aal[i,j,k])
+        idx = idx + 1
+      }
+    }
+  }
+}
+```
+
++ coordinate transformation
+
+```{r}
+for(i in 1:3) {
+  data[,i] = (data[,i]-min(data[,i]))/(max(data[,i])-min(data[,i]))
+}
+```
+
+```{r}
+write.csv(data, "G:/Phd/Data/HCPFMRI/2bk-0bk/100307_2bk-0bk.csv", row.names = FALSE)
+```
+
++ read subjects
+
+```{r}
+index.subject = read.csv("G:/Phd/Data/HCPFMRI/index2bk-0bk.csv")
+aal = readnii("G:/Phd/Data/HCPFMRI/AAL_MNI_2mm.nii")
+```
+
+```{r}
+nsub = 10
+
+for(m in c(1:nsub)) {
+  subject = index.subject$subject[m]
+  img = readnii(paste0(pathpre, subject, pathsuf))
+  dims = dim(img)
+  domains = !is.na(img)
+  n = sum(domains)
+  
+  data = matrix(NA,n,5)
+  colnames(data) = c("x1","x2", "x3", "y", "Code")
+  idx = 1
+  for(i in 1:dims[1]) {
+    for(j in 1:dims[2]) {
+      for(k in 1:dims[3]) {
+        if(domains[i,j,k]) {
+          data[idx,] = c(i,j,k,img[i,j,k], aal[i,j,k])
+          idx = idx + 1
+        }
+      }
+    }
+  }
+  
+  # coordinate transform
+  for(i in 1:3) {
+    data[,i] = (data[,i]-min(data[,i]))/(max(data[,i])-min(data[,i]))
+  }
+  
+  write.csv(data, paste0("G:/Phd/Data/HCPFMRI/2bk-0bk/",subject,"_2bk-0bk.csv"), row.names = FALSE)
+}
+```
+

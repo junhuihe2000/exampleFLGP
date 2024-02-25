@@ -1,0 +1,10 @@
+Package: exampleFLGP
+Type: Package
+Title: Statistical examples with FLGP
+Version: 1.0
+Date: 2023-07-22
+Author: person("Junhui", "He", , "hejh22@mails.tsinghua.edu.cn", role = c("aut", "cre"))
+Description: More about what it does (maybe more than one line)
+License: MIT + file LICENSE
+Imports: Rcpp (>= 1.0.11), RcppEigen
+LinkingTo: Rcpp, RcppEigen

@@ -1,0 +1,76 @@
+---
+title: "TestFLAG"
+author: "He Junhui"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(devtools)
+library(microbenchmark)
+library(parallel)
+library(Matrix)
+library(irlba)
+library(ggplot2)
+library(Rcpp)
+library(RcppEigen)
+library(FLAG)
+```
+
+```{r}
+Sys.setlocale("LC_ALL","English")
+```
+
+```{r}
+X0 <- matrix(rnorm(50*3), 50, 3)
+X1 <- matrix(rnorm(50*3, 3), 50, 3)
+Y <- c(rep(1,50),rep(0,50))
+X <- rbind(X0,X1)
+train_ind = sample(50*2)
+X <- X[train_ind,]
+Y <- Y[train_ind]
+X0_new <- matrix(rnorm(50*3),50,3)
+X1_new <- matrix(rnorm(50*3, 3),50,3)
+X_new <- rbind(X0_new, X1_new)
+Y_new <- c(rep(1,50),rep(0,50))
+s <- 10; r <- 3
+K <- 10
+results <- fit_lae_logit_gp(X, Y, X_new, s, r, K, approach = "posterior", output_cov = TRUE)
+Y_pred <- results$Y_pred
+C <- results$C
+Cvv <- as.matrix(C[1:100,])
+Cnv <- as.matrix(C[101:200,])
+aug_data <- AugmentedData(Cvv, cbind(Y,1-Y))
+# Y_pred <- fit_se_logit_gp(X, Y, X_new, s, r, K, approach = "posterior")
+error_rate(Y_new, Y_pred)
+```
+
+
+```{r}
+n <- 50
+X0 <- matrix(rnorm(n*3), n, 3)
+X1 <- matrix(rnorm(n*3, 5), n, 3)
+Y <- c(rep(1,n),rep(0,n))
+X <- rbind(X0,X1)
+n_test <- 1000
+X0_new <- matrix(rnorm(n_test*3),n_test,3)
+X1_new <- matrix(rnorm(n_test*3, 5),n_test,3)
+X_new <- rbind(X0_new, X1_new)
+Y_new <- c(rep(1,n_test),rep(0,n_test))
+s <- 600; r <- 3
+K <- 10
+```
+
+
+
+```{r}
+microbenchmark(lae={fit_lae_logit_gp(X,Y,X_new,s,r,K)},
+               lae_cpp={fit_lae_logit_gp_rcpp(X,Y,X_new,s,r,K)},
+               se={fit_se_logit_gp(X,Y,X_new,s,r,K)},
+               se_cpp={fit_se_logit_gp_rcpp(X,Y,X_new,s,r,K)},
+               times = 1)
+```

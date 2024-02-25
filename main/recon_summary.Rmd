@@ -1,0 +1,203 @@
+---
+title: "Reconstruction summary"
+author: "He Junhui"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(stringr)
+```
+
+
+```{r}
+index.subject = read.csv("G:/Phd/Data/HCPFMRI/index2bk-0bk.csv")
+```
+
+
+```{r}
+filepath = "tables/hcp/"
+nsub = 10
+```
+
+```{r}
+options(scipen=999)
+```
+
+
++ process Frontal Lobes data
+
+```{r}
+mse_train.frontal = matrix(0,6,4); mse_test.frontal = matrix(0,6,4)
+sd_train.frontal = matrix(0,6,4); sd_test.frontal = matrix(0,6,4)
+time.frontal = matrix(0,6,4)
+
+for(idx in c(1:nsub)) {
+  subject = index.subject$subject[idx]
+  data.frontal = read.csv(paste0(filepath,"frontal/",subject,".csv"))
+  for(i in c(1:4)) {
+    for(j in c(1:6)) {
+      train.reg = str_extract_all(data.frontal[j,(3*i-1)], "[^()]+")[[1]]
+      mse_train.frontal[j,i] = mse_train.frontal[j,i] + as.double(train.reg[1])
+      sd_train.frontal[j,i] = sd_train.frontal[j,i] + as.double(train.reg[2])
+      test.reg = str_extract_all(data.frontal[j,(3*i)], "[^()]+")[[1]]
+      mse_test.frontal[j,i] = mse_test.frontal[j,i] + as.double(test.reg[1])
+      sd_test.frontal[j,i] = sd_test.frontal[j,i] + as.double(test.reg[2])
+    }
+    time.frontal[1:3,i] = time.frontal[1:3,i] + data.frontal[1:3,(3*i+1)]
+  }
+}
+
+mydigits = 3
+mse_train.frontal = round(mse_train.frontal/nsub,digits = mydigits)
+mse_test.frontal = round(mse_test.frontal/nsub,digits=mydigits)
+sd_train.frontal = round(sd_train.frontal/nsub,digits=mydigits)
+sd_test.frontal = round(sd_test.frontal/nsub,digits=mydigits)
+time.frontal = round(time.frontal/nsub,digits=mydigits)
+```
+
+```{r}
+summary.frontal = as.data.frame(matrix(0,6,20))
+rownames(summary.frontal) = data.frontal[,1]
+colnames(summary.frontal) = rep(c("train mse", "train sd", "test mse", "test sd", "time"), 4)
+for(i in c(1:4)) {
+  summary.frontal[,((5*i-4):(5*i))] = cbind(mse_train.frontal[,i],sd_train.frontal[,i],
+                                            mse_test.frontal[,i],sd_test.frontal[,i],
+                                            time.frontal[,i])
+}
+# summary.frontal = round(summary.frontal,digits = 4)
+write.csv(summary.frontal, paste0(filepath,"frontal/summary_frontal.csv"))
+```
+
+```{r}
+summarycom.frontal = as.data.frame(matrix(0,6,12))
+rownames(summarycom.frontal) = data.frontal[,1]
+colnames(summarycom.frontal) = rep(c("train mse", "test mse", "time"), 4)
+for(i in c(1:4)) {
+  summarycom.frontal[,(3*i)] = time.frontal[,i]
+  for(j in c(1:6)) {
+    summarycom.frontal[j,(3*i-2)] = paste0(mse_train.frontal[j,i],"(",sd_train.frontal[j,i],")")
+    summarycom.frontal[j,(3*i-1)] = paste0(mse_test.frontal[j,i],"(",sd_test.frontal[j,i],")")
+  }
+}
+write.csv(summarycom.frontal, paste0(filepath,"frontal/summarycom_frontal.csv"))
+```
+
++ process subjects data
+
+```{r}
+mse_train.subjects = matrix(0,4,6); mse_test.subjects = matrix(0,4,6)
+sd_train.subjects = matrix(0,4,6); sd_test.subjects = matrix(0,4,6)
+time.subjects = matrix(0,4,6)
+
+for(idx in c(1:nsub)) {
+  subject = index.subject$subject[idx]
+  data.subjects = read.csv(paste0(filepath,"subjects/",subject,".csv"))
+  for(i in c(1:6)) {
+    for(j in c(1:4)) {
+      train.reg = str_extract_all(data.subjects[j,(3*i-1)], "[^()]+")[[1]]
+      mse_train.subjects[j,i] = mse_train.subjects[j,i] + as.double(train.reg[1])
+      sd_train.subjects[j,i] = sd_train.subjects[j,i] + as.double(train.reg[2])
+      test.reg = str_extract_all(data.subjects[j,(3*i)], "[^()]+")[[1]]
+      mse_test.subjects[j,i] = mse_test.subjects[j,i] + as.double(test.reg[1])
+      sd_test.subjects[j,i] = sd_test.subjects[j,i] + as.double(test.reg[2])
+    }
+    time.subjects[,i] = time.subjects[,i] + data.subjects[,(3*i+1)]
+  }
+}
+
+mse_train.subjects = round(mse_train.subjects/nsub,digits = 4)
+mse_test.subjects = round(mse_test.subjects/nsub,digits=4)
+sd_train.subjects = round(sd_train.subjects/nsub,digits=4)
+sd_test.subjects = round(sd_test.subjects/nsub,digits=4)
+time.subjects = round(time.subjects/nsub,digits=4)
+```
+
+```{r}
+summary.subjects = as.data.frame(matrix(0,4,30))
+rownames(summary.subjects) = data.subjects[,1]
+colnames(summary.subjects) = rep(c("train mse", "train sd", "test mse", "test sd", "time"), 6)
+for(i in c(1:6)) {
+  summary.subjects[,((5*i-4):(5*i))] = cbind(mse_train.subjects[,i],sd_train.subjects[,i],
+                                            mse_test.subjects[,i],sd_test.subjects[,i],
+                                            time.subjects[,i])
+}
+# summary.subjects = round(summary.subjects,digits = 4)
+write.csv(summary.subjects, paste0(filepath,"subjects/summary_subjects.csv"))
+```
+
+```{r}
+summarycom.subjects = as.data.frame(matrix(0,4,18))
+rownames(summarycom.subjects) = data.subjects[,1]
+colnames(summarycom.subjects) = rep(c("train mse", "test mse", "time"), 6)
+for(i in c(1:6)) {
+  summarycom.subjects[,(3*i)] = time.subjects[,i]
+  for(j in c(1:4)) {
+    summarycom.subjects[j,(3*i-2)] = paste0(mse_train.subjects[j,i],"(",sd_train.subjects[j,i],")")
+    summarycom.subjects[j,(3*i-1)] = paste0(mse_test.subjects[j,i],"(",sd_test.subjects[j,i],")")
+  }
+}
+write.csv(summarycom.subjects, paste0(filepath,"subjects/summarycom_subjects.csv"))
+```
+
+
++ process regions data
+
+```{r}
+mse_train.regions = matrix(0,4,6); mse_test.regions = matrix(0,4,6)
+sd_train.regions = matrix(0,4,6); sd_test.regions = matrix(0,4,6)
+time.regions = matrix(0,4,6)
+
+for(idx in c(1:nsub)) {
+  subject = index.subject$subject[idx]
+  data.regions = read.csv(paste0(filepath,"regions/",subject,".csv"))
+  for(i in c(1:6)) {
+    for(j in c(1:4)) {
+      train.reg = str_extract_all(data.regions[j,(3*i-1)], "[^()]+")[[1]]
+      mse_train.regions[j,i] = mse_train.regions[j,i] + as.double(train.reg[1])
+      sd_train.regions[j,i] = sd_train.regions[j,i] + as.double(train.reg[2])
+      test.reg = str_extract_all(data.regions[j,(3*i)], "[^()]+")[[1]]
+      mse_test.regions[j,i] = mse_test.regions[j,i] + as.double(test.reg[1])
+      sd_test.regions[j,i] = sd_test.regions[j,i] + as.double(test.reg[2])
+    }
+    time.regions[,i] = time.regions[,i] + data.regions[,(3*i+1)]
+  }
+}
+
+mse_train.regions = round(mse_train.regions/nsub,digits = 4)
+mse_test.regions = round(mse_test.regions/nsub,digits=4)
+sd_train.regions = round(sd_train.regions/nsub,digits=4)
+sd_test.regions = round(sd_test.regions/nsub,digits=4)
+time.regions = round(time.regions/nsub,digits=4)
+```
+
+```{r}
+summary.regions = as.data.frame(matrix(0,4,30))
+rownames(summary.regions) = data.regions[,1]
+colnames(summary.regions) = rep(c("train mse", "train sd", "test mse", "test sd", "time"), 6)
+for(i in c(1:6)) {
+  summary.regions[,((5*i-4):(5*i))] = cbind(mse_train.regions[,i],sd_train.regions[,i],
+                                            mse_test.regions[,i],sd_test.regions[,i],
+                                            time.regions[,i])
+}
+# summary.regions = round(summary.regions,digits = 4)
+write.csv(summary.regions, paste0(filepath,"regions/summary_regions.csv"))
+```
+
+```{r}
+summarycom.regions = as.data.frame(matrix(0,4,18))
+rownames(summarycom.regions) = data.regions[,1]
+colnames(summarycom.regions) = rep(c("train mse", "test mse", "time"), 6)
+for(i in c(1:6)) {
+  summarycom.regions[,(3*i)] = time.regions[,i]
+  for(j in c(1:4)) {
+    summarycom.regions[j,(3*i-2)] = paste0(mse_train.regions[j,i],"(",sd_train.regions[j,i],")")
+    summarycom.regions[j,(3*i-1)] = paste0(mse_test.regions[j,i],"(",sd_test.regions[j,i],")")
+  }
+}
+write.csv(summarycom.regions, paste0(filepath,"regions/summarycom_regions.csv"))
+```

@@ -1,0 +1,117 @@
+---
+title: "HCP Reconstruction"
+author: "He Junhui"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(oro.nifti)
+library(neurobase)
+library(bigmemory)
+library(readxl)
+```
+
+```{r}
+pathpre = "G:/Phd/Data/HCPFMRI/WM_contrasts/Contrasts/"
+pathsuf = "_2bk-0bk.nii"
+```
+
++ AAL
+
+```{r}
+aal_mni = readnii("G:/Phd/Data/HCPFMRI/AAL_MNI_2mm.nii")
+aal_region = read_excel("G:/Phd/Data/HCPFMRI/AALregion_full.xls")
+```
+
+```{r}
+aal_index = is.element(aal_mni, aal_region$Code)
+```
+
+```{r}
+n = sum(aal_index)
+dims = dim(aal_mni)
+```
+
++ read the input
+
+```{r}
+input = matrix(NA, n, 3)
+colnames(input) = c("x1", "x2", "x3")
+```
+
+```{r}
+idx = 1
+for(k in 1:dims[3]) {
+  for(j in 1:dims[2]) {
+    for(i in 1:dims[1]) {
+      if(is.element(aal_mni[i,j,k], aal_region$Code)) {
+        input[idx,] = c(i,j,k)
+        idx = idx + 1
+      }
+    }
+  }
+}
+```
+
++ coordinate transformation
+
+```{r}
+for(i in 1:3) {
+  input[,i] = (input[,i]-min(input[,i]))/(max(input[,i])-min(input[,i]))
+}
+```
+
+```{r}
+dim(input)
+```
+
+
+```{r}
+write.csv(input, "G:/Phd/Data/HCPFMRI/2bk-0bk/input.csv", row.names = FALSE)
+```
+
++ read the output
+
+```{r}
+idx_sub = read.csv("G:/Phd/Data/HCPFMRI/index2bk-0bk.csv")
+```
+
+```{r}
+q = nrow(idx_sub)
+```
+
+```{r}
+output.bigmatrix = filebacked.big.matrix(nrow=n,ncol=q,type="double",backingfile = "tem.csv", backingpath = "G:/Phd/Data/HCPFMRI/2bk-0bk/")
+```
+
+```{r, include=FALSE}
+t1 = Sys.time()
+for(i in c(1:q)) {
+  filepath = paste0(pathpre, idx_sub$subject[i], pathsuf)
+  img = readnii(filepath)
+  output.bigmatrix[,i] = img[aal_index]
+  cat("\nRead",i,"nii\n")
+}
+t2 = Sys.time()
+```
+
+```{r}
+t2-t1
+```
+
+```{r}
+dim(output.bigmatrix)
+```
+
+```{r}
+write.big.matrix(output.bigmatrix, "G:/Phd/Data/HCPFMRI/2bk-0bk/output.csv")
+```
+
+```{r}
+rm(output.bigmatrix)
+```

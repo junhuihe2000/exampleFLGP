@@ -1,0 +1,198 @@
+---
+title: "Reconstruct Table"
+author: "He Junhui"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
++ read data 
+
+```{r}
+library(FLAG)
+library(kernlab)
+library(bigmemory)
+```
+
+```{r}
+if(FALSE) {
+data_100206 = read.csv("G:/Phd/Data/HCPFMRI/1002062bk-0bk.csv")
+X = as.matrix(data_100206[,-4])
+y = data_100206[,4]
+}
+```
+
+```{r}
+if(TRUE) {
+filepath = "G:/Phd/Data/HCPFMRI/2bk-0bk/"
+input = read.csv(paste0(filepath, "input.csv"))
+X = as.matrix(input)
+y = read.big.matrix(paste0(filepath, "output.csv"), type="double")
+}
+```
+
+
+```{r}
+set.seed(1234)
+```
+
+
+## Experiment
+```{r}
+n = nrow(X); n_used = n
+q = ncol(y); q_used = q
+num_exps = 1 # experiment numbers
+ms = c(2000) # number of labeled samples
+res_list = lapply(c(1:(length(ms)*3)), function(i) {return(matrix(0,nrow=5,ncol=num_exps))})
+```
+
+```{r}
+# hyper parameters
+s = 1000; r = 3; K = 200
+models = list(subsample="kmeans", kernel="lae", gl="cluster-normalized", root=TRUE)
+```
+
+```{r, include=FALSE}
+time_start = Sys.time()
+
+for(i in c(1:length(ms))) {
+
+for(num_exp in c(1:num_exps)) {
+  
+
+cat("\n\n##########################################################\n")  
+cat(paste0("When m = ",ms[i],", the ",num_exp, "-th experiment:\n\n"))
+  
+# regression
+m = ms[i]
+train.index = sample.int(n, m)
+test.index = sample(c(1:n)[-train.index],n_used-m)
+X.train = X[train.index,]; X.test = X[test.index,]
+# y.train = y[train.index]; y.test = y[test.index]
+y.train = y[train.index,1:q_used]; y.test = y[test.index,1:q_used]
+y.train[is.na(y.train)] = 0
+test.hcp = !is.na(y.test)
+
+if(FALSE) {
+# radial basis kernel function
+t1 = Sys.time()
+rbf.hcp = gausspr(x=X.train, y=y.train)
+train_pred.hcp = predict(rbf.hcp, X.train)
+test_pred.hcp = predict(rbf.hcp, X.test)
+t2 = Sys.time()
+mse_train.rbf.hcp = sum((y.train-train_pred.hcp)^2)/m
+mse_test.rbf.hcp = sum((y.test-test_pred.hcp)^2)/(n_used-m)
+
+res_list[[3*i-2]][1,num_exp] = mse_train.rbf.hcp
+res_list[[3*i-1]][1,num_exp] = mse_test.rbf.hcp
+res_list[[3*i]][1,num_exp] = as.numeric(t2-t1, units="hours")*3600
+
+
+# SRFLAG
+models$subsample = "random"; models$gl = "normalized"
+t1 = Sys.time()
+y_srflag.hcp = fit_se_regression_gp_rcpp(X.train, y.train, X.test, s, r, K, models = models)
+t2 = Sys.time()
+train_pred_srflag.hcp = y_srflag.hcp$train
+test_pred_srflag.hcp = y_srflag.hcp$test
+
+mse_train.srflag.hcp = sum((y.train-train_pred_srflag.hcp)^2)/m
+mse_test.srflag.hcp = sum((y.test-test_pred_srflag.hcp)^2)/(n_used-m)
+
+res_list[[3*i-2]][2,num_exp] = mse_train.srflag.hcp
+res_list[[3*i-1]][2,num_exp] = mse_test.srflag.hcp
+res_list[[3*i]][2,num_exp] = as.numeric(t2-t1, units="hours")*3600
+
+# SKFLAG
+models$subsample = "kmeans"; models$gl = "cluster-normalized"
+t1 = Sys.time()
+y_skflag.hcp = fit_se_regression_gp_rcpp(X.train, y.train, X.test, s, r, K, models = models)
+t2 = Sys.time()
+train_pred_skflag.hcp = y_skflag.hcp$train
+test_pred_skflag.hcp = y_skflag.hcp$test
+
+mse_train.skflag.hcp = sum((y.train-train_pred_skflag.hcp)^2)/m
+mse_test.skflag.hcp = sum((y.test-test_pred_skflag.hcp)^2)/(n_used-m)
+
+res_list[[3*i-2]][3,num_exp] = mse_train.skflag.hcp
+res_list[[3*i-1]][3,num_exp] = mse_test.skflag.hcp
+res_list[[3*i]][3,num_exp] = as.numeric(t2-t1, units="hours")*3600
+
+# LRFLAG
+models$subsample = "random"; models$gl = "normalized"
+t1 = Sys.time()
+y_lrflag.hcp = fit_lae_regression_gp_rcpp(X.train, y.train, X.test, s, r, K, models = models)
+t2 = Sys.time()
+train_pred_lrflag.hcp = y_lrflag.hcp$train
+test_pred_lrflag.hcp = y_lrflag.hcp$test
+
+mse_train.lrflag.hcp = sum((y.train-train_pred_lrflag.hcp)^2)/m
+mse_test.lrflag.hcp = sum((y.test-test_pred_lrflag.hcp)^2)/(n_used-m)
+
+res_list[[3*i-2]][4,num_exp] = mse_train.lrflag.hcp
+res_list[[3*i-1]][4,num_exp] = mse_test.lrflag.hcp
+res_list[[3*i]][4,num_exp] = as.numeric(t2-t1, units="hours")*3600
+}
+
+# LKFLAG
+models$subsample = "kmeans"; models$gl = "cluster-normalized"
+t1 = Sys.time()
+res_lkflag.hcp = fit_lae_regression_gp_rcpp(X.train, y.train, X.test, s, r, K, models = models, noise = "different")
+t2 = Sys.time()
+y_lkflag.hcp = res_lkflag.hcp$Y_pred
+train_pred_lkflag.hcp = y_lkflag.hcp$train
+test_pred_lkflag.hcp = y_lkflag.hcp$test
+
+mse_train.lkflag.hcp = sum((y.train-train_pred_lkflag.hcp)^2)/m/q
+mse_test.lkflag.hcp = sum((y.test[test.hcp]-test_pred_lkflag.hcp[test.hcp])^2)/sum(test.hcp)
+
+res_list[[3*i-2]][5,num_exp] = mse_train.lkflag.hcp
+res_list[[3*i-1]][5,num_exp] = mse_test.lkflag.hcp
+res_list[[3*i]][5,num_exp] = as.numeric(t2-t1, units="hours")*3600
+
+}
+}
+
+time_end = Sys.time()
+time_diff = time_end - time_start
+```
+
+```{r}
+print(time_diff)
+```
+
+## manipulate results
+```{r}
+cat("The number of total samples is n_used = ",n_used,":\n", sep = "")
+res_table = as.data.frame(matrix(0,nrow=5,ncol=length(ms)*3))
+colnames(res_table) = rep(c("train mse", "test mse", "time"), length(ms))
+rownames(res_table) = c("RBF GP", "SRFLAG", "SKFLAG", "LRFLAG", "LKFLAG")
+
+mydigits = 4
+
+for(i in c(1:length(ms))) {
+  # time
+  res_table[,(3*i)] = round(rowMeans(res_list[[(3*i)]]), digits = mydigits)
+  
+  train_mse_mean = round(rowMeans(res_list[[(3*i-2)]]), digits = mydigits)
+  train_mse_std = round(apply(res_list[[(3*i-2)]], 1, sd), digits = mydigits)
+  
+  test_mse_mean = round(rowMeans(res_list[[(3*i-1)]]), digits = mydigits)
+  test_mse_std = round(apply(res_list[[(3*i-1)]], 1, sd), digits = mydigits)
+  
+  for(j in c(1:5)) {
+    res_table[j,(3*i-2)] = paste0(train_mse_mean[j],"(",train_mse_std[j],")")
+    res_table[j,(3*i-1)] = paste0(test_mse_mean[j],"(",test_mse_std[j],")")
+  }
+}
+
+print(res_table)
+
+```
+
+```{r}
+write.csv(res_table, paste0("tables/hcp","n",n_used,"s",s,"methods",".csv"))
+```

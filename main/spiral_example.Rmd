@@ -1,0 +1,174 @@
+---
+title: "Spiral"
+author: "He Junhui"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(FLAG)
+library(kernlab)
+library(ggplot2)
+library(latex2exp)
+```
+
++ spiral case
+
+```{r}
+set.seed(1234)
+```
+
+
+```{r}
+n = 2000
+theta = runif(n,0,8*pi)
+X = cbind((theta+4)^(0.7)*cos(theta), (theta+4)^(0.7)*sin(theta))
+Y = 3*sin(theta/10) + 3*cos(theta/2) + 4*sin(4*theta/5)
+```
+
+
+```{r,include=FALSE}
+ggplot() + geom_point(aes(X[,1],X[,2]),size=0.5) +
+  xlab(TeX("$X_1$")) + ylab(TeX("$X_2$"))
+ggsave("plots/spiral/allpoints.pdf")
+```
+
+```{r}
+s = 200
+I = subsample_cpp(X, s)
+```
+
+```{r,include=FALSE}
+ggplot() + geom_point(aes(I[,1],I[,2]),size=0.5) +
+  xlab(TeX("$X_1$")) + ylab(TeX("$X_2$"))
+ggsave("plots/spiral/subsamplepoints.pdf")
+```
+
+```{r}
+ggplot() + geom_point(aes(X[,1],X[,2],color=Y)) +
+  scale_color_gradientn(colours = rainbow(10))
+```
+
+
+```{r}
+m = 500
+train.index = sample.int(n,m); test.index = c(1:n)[-train.index]
+X.train = X[train.index,]; Y.train = Y[train.index]
+X.test = X[test.index,]; Y.test = Y[test.index]
+Yobs.train = Y.train + rnorm(m,0,1)
+```
+
+```{r}
+sqrt(sum((Y.test-mean(Yobs.train))^2)/(n-m))
+```
+
+
+```{r}
+s = 500; r = 3; K = 100
+```
+
++ LKFLAG
+
+```{r}
+t1 = Sys.time()
+res_pred_lkflag = fit_lae_regression_gp_rcpp(X.train,Yobs.train,X.test,s,r,K)
+t2 = Sys.time()
+t2-t1
+```
+
+```{r}
+Y_pred_lkflag = res_pred_lkflag$Y_pred
+sqrt(sum((Y.train-Y_pred_lkflag$train)^2)/(n-m))
+sqrt(sum((Y.test-Y_pred_lkflag$test)^2)/(n-m))
+```
+
+```{r}
+ggplot() + geom_point(aes(X.test[,1],X.test[,2],color=Y_pred_lkflag$test)) +
+  scale_color_gradientn(colours = rainbow(10)) +
+  geom_point(aes(X.train[,1],X.train[,2]),color="black", size=0.7)
+```
+
++ SKFLAG
+
+```{r}
+t1 = Sys.time()
+Y_pred_skflag = fit_se_regression_gp_rcpp(X.train,Yobs.train,X.test,s,r,K)
+t2 = Sys.time()
+t2 - t1
+```
+
+```{r}
+sqrt(sum((Y.test-Y_pred_skflag$test)^2)/(n-m))
+```
+
+```{r}
+ggplot() + geom_point(aes(X.test[,1],X.test[,2],color=Y_pred_skflag$test)) +
+  scale_color_gradientn(colours = rainbow(10)) +
+  geom_point(aes(X.train[,1],X.train[,2]),color="black", size=0.7)
+```
+
++ RBF
+
+```{r}
+t1 = Sys.time()
+rbf.spiral = gausspr(X.train,Yobs.train)
+Y_pred_rbf = predict(rbf.spiral, X.test)
+t2 = Sys.time()
+t2 - t1
+sqrt(sum((Y.test-Y_pred_rbf)^2)/(n-m))
+```
+
+```{r}
+ggplot() + geom_point(aes(X.test[,1],X.test[,2],color=Y_pred_rbf)) +
+  scale_color_gradientn(colours = rainbow(10)) +
+  geom_point(aes(X.train[,1],X.train[,2]),color="black", size=0.7)
+```
+
++ GLGP
+
+```{r}
+t1 = Sys.time()
+Y_pred_gl = fit_gl_regression_gp_rcpp(X.train,Yobs.train,X.test,K,sparse = FALSE)
+t2 = Sys.time()
+t2 - t1
+```
+
+```{r}
+sqrt(sum((Y.test-Y_pred_gl$test)^2)/(n-m))
+```
+
+```{r}
+ggplot() + geom_point(aes(X.test[,1],X.test[,2],color=Y_pred_gl$test)) +
+  scale_color_gradientn(colours = rainbow(10)) +
+  geom_point(aes(X.train[,1],X.train[,2]),color="black", size=0.7)
+```
+
+
+```{r}
+ggplot() + geom_point(aes(X.test[,1],X.test[,2],color=Y_pred_gl$test-Y.test)) +
+  scale_color_gradientn(colours = rainbow(10)) +
+  geom_point(aes(X.train[,1],X.train[,2]),color="black", size=0.7)
+```
+
+
+```{r}
+ggplot() + geom_point(aes(X.test[,1],X.test[,2],color=Y_pred_lkflag$test-Y.test)) +
+  scale_color_gradientn(colours = rainbow(10)) +
+  geom_point(aes(X.train[,1],X.train[,2]),color="black", size=0.7)
+```
+
+```{r}
+ggplot() + geom_point(aes(X.test[,1],X.test[,2],color=Y_pred_skflag$test-Y.test)) +
+  scale_color_gradientn(colours = rainbow(10)) +
+  geom_point(aes(X.train[,1],X.train[,2]),color="black", size=0.7)
+```
+
+```{r}
+ggplot() + geom_point(aes(X.test[,1],X.test[,2],color=Y_pred_rbf-Y.test)) +
+  scale_color_gradientn(colours = rainbow(10)) +
+  geom_point(aes(X.train[,1],X.train[,2]),color="black", size=0.7)
+```

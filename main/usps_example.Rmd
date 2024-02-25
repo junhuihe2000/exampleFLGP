@@ -1,0 +1,125 @@
+---
+title: "USPS_example"
+author: "He Junhui"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(kernlab)
+library(FLAG)
+library(microbenchmark)
+```
+
+```{r}
+#######################################################
+# The second example
+# USPS examples
+# 7291 * 16 * 16
+
+set.seed(1234)
+```
+
+
+```{r}
+# read usps samples
+usps = read.csv("G:/HeJunhui/research/2023/RepGLGP/dataset/usps/usps_train.csv", header = FALSE, row.names=1, skip = 1)
+```
+
+
+
+```{r}
+# classification
+# divide training samples and testing samples
+
+n = dim(usps)[1] # 7291
+d = dim(usps)[2] # 257
+m = 100
+
+train.index.usps = sample.int(n, m); test.index.usps = c(1:n)[-train.index.usps]
+train.data.usps = usps[train.index.usps,]
+test.data.usps = usps[test.index.usps, ]
+```
+
+```{r}
+# radial basis kernel function
+rbf.usps = gausspr(x=as.matrix(train.data.usps[,-d]), y=as.factor(train.data.usps[,d]),
+                      type="classification", scaled = FALSE)
+pred_prob.usps = predict(rbf.usps, as.matrix(test.data.usps[,-d]), type="probabilities")
+pred_label.usps = apply(pred_prob.usps, 1, function(x) {return(which.max(x)-1)})
+err.rbf.usps = sum((test.data.usps[,d]!=pred_label.usps)^2)/(n-m)
+err.rbf.usps
+```
+
+```{r}
+# ksvm
+ksvm.usps = ksvm(x=as.matrix(train.data.usps[,-d]), y=as.factor(train.data.usps[,d]), 
+                    type="C-svc", scaled = FALSE)
+pred_label.ksvm.usps = predict(ksvm.usps, as.matrix(test.data.usps[,-d]))
+err.ksvm.usps = sum((test.data.usps[,d]!=pred_label.ksvm.usps)^2)/(n-m)
+err.ksvm.usps
+```
+
+
+```{r}
+# FLAG
+# process data
+y.usps = train.data.usps[,d]
+y_new.usps = test.data.usps[,d]
+```
+
+```{r}
+# hyper parameters
+s = 1000; r = 3; K = 200
+models = list(subsample="kmeans", kernel="lae", gl="cluster-normalized", root=TRUE)
+```
+
+
++ LKFLAG
+```{r}
+# LKFLAG
+models$subsample = "kmeans"; models$gl = "cluster-normalized"
+```
+
+
+```{r}
+t1 = Sys.time()
+y_lkflag.usps = fit_lae_logit_mult_gp_rcpp(as.matrix(train.data.usps[,-d]), y.usps, as.matrix(test.data.usps[,-d]), s, r, K, models = models)
+t2 = Sys.time()
+t2 - t1
+# Time difference of 5.098414 secs
+```
+
+```{r}
+err_lkflag.usps = sum((y_new.usps!=y_lkflag.usps$test)^2)/(n-m)
+err_lkflag.usps
+# 0.07203449
+```
+
++ SKFLAG
+```{r}
+# SKFLAG
+models$subsample = "kmeans"; models$gl = "cluster-normalized"
+```
+
+```{r}
+t1 = Sys.time()
+y_skflag.usps = fit_se_logit_mult_gp_rcpp(as.matrix(train.data.usps[,-d]), y.usps, as.matrix(test.data.usps[,-d]), s, r, K, models = models)
+t2 = Sys.time()
+t2 - t1
+# Time difference of 15.76504 secs
+```
+
+```{r}
+err_skflag.usps = sum((y_new.usps!=y_skflag.usps$test)^2)/(n-m)
+err_skflag.usps
+# 0.0705048
+```
+
+
+
+

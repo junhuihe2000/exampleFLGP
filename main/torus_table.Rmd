@@ -1,0 +1,229 @@
+---
+title: "Torus table"
+author: "He Junhui"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(ggplot2)
+library(ggpubr)
+library(kernlab)
+library(FLAG)
+```
+
+```{r}
+options(scipen=999)
+```
+
+```{r}
+#######################################################
+# The first example
+# Torus examples
+
+set.seed(1234)
+```
+
+```{r}
+# generate samples of torus
+n = 12000; n_each = 2000; d = 3
+thetas = runif(n, 0, 2*pi)
+X = matrix(0, nrow=n, ncol=2); Y = matrix(0, nrow=n, ncol=1)
+X[,1] = cos(thetas); X[,2] = sin(thetas)
+for(i in 0:5) {
+  X[(i*n_each+1):((i+1)*n_each),] = (0.5+0.1*i)*X[(i*n_each+1):((i+1)*n_each),]
+  Y[(i*n_each+1):((i+1)*n_each),] = as.numeric((-1)^i>0)
+}
+
+Y = as.factor(Y)
+torus.df = data.frame(X,Y)
+```
+
+## Experiment
+```{r}
+num_exps = 20 # experiment numbers
+ms = c(50,100) # number of labeled samples
+res_list = lapply(c(1:(length(ms)*2)), function(i) {return(matrix(0,nrow=9,ncol=num_exps))})
+```
+
+```{r}
+# hyper parameters
+s = 600; r = 3; K = 100
+models = list(subsample="kmeans", kernel="lae", gl="cluster-normalized", root=TRUE)
+```
+
+
+```{r, include=FALSE}
+time_start = Sys.time()
+
+for(i in c(1:length(ms))) {
+
+for(num_exp in c(1:num_exps)) {
+  
+  
+  
+# classification
+m = ms[i]
+train.index = sample.int(n, m); test.index = c(1:n)[-train.index]
+train.data = torus.df[train.index,]; test.data = torus.df[-train.index,]
+colnames(test.data)[3] = "Class"
+
+# radial basis kernel function
+t1 = Sys.time()
+rbf.torus = gausspr(x=train.data[,1:2], y=train.data[,3], type="classification")
+pred_prob.torus = predict(rbf.torus, test.data[,1:2], type="probabilities")
+pred_label.torus = as.factor(apply(pred_prob.torus, 1, function(x) {return(which.max(x)-1)}))
+t2 = Sys.time()
+err.rbf.torus = sum((as.double(test.data[,3])!=as.double(pred_label.torus))^2)/(n-m)
+
+res_list[[2*i-1]][1,num_exp] = err.rbf.torus
+res_list[[2*i]][1,num_exp] = as.numeric(t2-t1, units="hours")*3600
+
+# ksvm
+t1 = Sys.time()
+ksvm.torus = ksvm(x=as.matrix(train.data[,1:(d-1)]), y=as.factor(train.data[,d]), 
+            type="C-svc")
+pred_label.ksvm.torus = predict(ksvm.torus, as.matrix(test.data[,1:(d-1)]))
+t2 = Sys.time()
+err.ksvm.torus = sum((test.data[,d]!=pred_label.ksvm.torus)^2)/(n-m)
+
+res_list[[2*i-1]][2,num_exp] = err.ksvm.torus
+res_list[[2*i]][2,num_exp] = as.numeric(t2-t1, units="hours")*3600
+
+
+# Representative GLGP
+# process data
+torus.order = torus.df[c(train.index, test.index), ]
+X.scale.torus = scale(as.matrix(torus.order[ ,1:(d-1)]), center = TRUE, scale = TRUE)
+X.scale.torus = X.scale.torus / sqrt(ncol(X.scale.torus))
+
+f.torus = as.numeric(train.data[,d])-1
+f_test.torus = as.numeric(test.data[,d])-1
+
+
+# GLGP
+t1 = Sys.time()
+res_gl.torus = fit_gl_logit_gp_rcpp(X.scale.torus[1:m,], f.torus, X.scale.torus[(m+1):n,], K, sparse = FALSE, models = models, output_cov = FALSE)
+y_pred_gl.torus = res_gl.torus$Y_pred
+t2 = Sys.time()
+err_gl.torus = sum((f_test.torus!=y_pred_gl.torus$test)^2)/(n-m)
+
+res_list[[2*i-1]][3,num_exp] = err_gl.torus
+res_list[[2*i]][3,num_exp] = as.numeric(t2-t1, units="hours")*3600
+
+
+# sparseGLGP
+t1 = Sys.time()
+res_glsp.torus = fit_gl_logit_gp_rcpp(X.scale.torus[1:m,], f.torus, X.scale.torus[(m+1):n,], K, threshold = 0.01, sparse = TRUE, models = models, output_cov = FALSE)
+y_pred_glsp.torus = res_glsp.torus$Y_pred
+t2 = Sys.time()
+err_glsp.torus = sum((f_test.torus!=y_pred_glsp.torus$test)^2)/(n-m)
+
+res_list[[2*i-1]][4,num_exp] = err_glsp.torus
+res_list[[2*i]][4,num_exp] = as.numeric(t2-t1, units="hours")*3600
+
+
+# Nystrom extension
+t1 = Sys.time()
+res_nystrom.torus = fit_nystrom_logit_gp_rcpp(X.scale.torus[1:m,], f.torus, X.scale.torus[(m+1):n,], s, K, models = models, output_cov = FALSE)
+y_pred_nystrom.torus = res_nystrom.torus$Y_pred
+t2 = Sys.time()
+err_nystrom.torus = sum((f_test.torus!=y_pred_nystrom.torus$test)^2)/(n-m)
+
+res_list[[2*i-1]][5,num_exp] = err_nystrom.torus
+res_list[[2*i]][5,num_exp] = as.numeric(t2-t1, units="hours")*3600
+
+# SRFLAG
+models$subsample = "random"; models$gl = "normalized"
+t1 = Sys.time()
+res_srflag.torus = fit_se_logit_gp_rcpp(X.scale.torus[1:m,], f.torus, X.scale.torus[(m+1):n,], s, r, K, models = models, output_cov = FALSE)
+y_pred_srflag.torus = res_srflag.torus$Y_pred
+t2 = Sys.time()
+err_srflag.torus = sum((f_test.torus!=y_pred_srflag.torus$test)^2)/(n-m)
+
+res_list[[2*i-1]][6,num_exp] = err_srflag.torus
+res_list[[2*i]][6,num_exp] = as.numeric(t2-t1, units="hours")*3600
+
+# SKFLAG
+models$subsample = "kmeans"; models$gl = "cluster-normalized"
+t1 = Sys.time()
+res_skflag.torus = fit_se_logit_gp_rcpp(X.scale.torus[1:m,], f.torus, X.scale.torus[(m+1):n,], s, r, K, models = models, output_cov = FALSE)
+y_pred_skflag.torus = res_skflag.torus$Y_pred
+t2 = Sys.time()
+err_skflag.torus = sum((f_test.torus!=y_pred_skflag.torus$test)^2)/(n-m)
+
+res_list[[2*i-1]][7,num_exp] = err_skflag.torus
+res_list[[2*i]][7,num_exp] = as.numeric(t2-t1, units="hours")*3600
+
+
+# LRFLAG
+models$subsample = "random"; models$gl = "normalized"
+t1 = Sys.time()
+res_lrflag.torus = fit_lae_logit_gp_rcpp(X.scale.torus[1:m,], f.torus, X.scale.torus[(m+1):n,], s, r, K, models = models, output_cov = FALSE)
+y_pred_lrflag.torus = res_lrflag.torus$Y_pred
+t2 = Sys.time()
+err_lrflag.torus = sum((f_test.torus!=y_pred_lrflag.torus$test)^2)/(n-m)
+
+res_list[[2*i-1]][8,num_exp] = err_lrflag.torus
+res_list[[2*i]][8,num_exp] = as.numeric(t2-t1, units="hours")*3600
+
+
+# LKFLAG
+models$subsample = "kmeans"; models$gl = "cluster-normalized"
+t1 = Sys.time()
+res_lkflag.torus = fit_lae_logit_gp_rcpp(X.scale.torus[1:m,], f.torus, X.scale.torus[(m+1):n,], s, r, K, models = models, output_cov = FALSE)
+y_pred_lkflag.torus = res_lkflag.torus$Y_pred
+t2 = Sys.time()
+err_lkflag.torus = sum((f_test.torus!=y_pred_lkflag.torus$test)^2)/(n-m)
+
+res_list[[2*i-1]][9,num_exp] = err_lkflag.torus
+res_list[[2*i]][9,num_exp] = as.numeric(t2-t1, units="hours")*3600
+
+}
+  
+}
+
+time_end = Sys.time()
+time_diff = time_end - time_start
+```
+
+```{r}
+print(time_diff)
+# Time difference of 9.501027 mins
+# Time difference of 14.98992 mins
+# Time difference of 58.79785 mins
+```
+
+
+## manipulate results
+```{r}
+cat("The number of total samples is n = ",n,":\n", sep = "")
+res_table = as.data.frame(matrix(0,nrow=9,ncol=4))
+colnames(res_table) = c("error rates", "time", "error rates", "time")
+rownames(res_table) = c("RBF GP", "RBF KSVM", "GLGP", "sparseGLGP", "Nystrom extension", 
+                        "SRFLAG", "SKFLAG", "LRFLAG", "LKFLAG")
+
+res_table[,2] = round(rowMeans(res_list[[2]]), digits = 2)
+res_table[,4] = round(rowMeans(res_list[[4]]), digits = 2)
+error_mean1 = round(rowMeans(res_list[[1]])*100, digits = 1)
+error_std1 = round(apply(res_list[[1]]*100, 1, sd), digits = 1)
+for(i in c(1:9)) {
+  res_table[i,1] = paste0(error_mean1[i],"(",error_std1[i],")")
+}
+
+error_mean2 = round(rowMeans(res_list[[3]])*100, digits = 1)
+error_std2 = round(apply(res_list[[3]]*100, 1, sd), digits = 1)
+for(i in c(1:9)) {
+  res_table[i,3] = paste0(error_mean2[i],"(",error_std2[i],")")
+}
+```
+
+```{r}
+write.csv(res_table, paste0("tables/circles/",n,".csv"))
+print(res_table)
+```
+

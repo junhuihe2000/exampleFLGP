@@ -1,0 +1,227 @@
+---
+title: "mnist_table"
+author: "He Junhui"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(kernlab)
+library(FLAG)
+library(microbenchmark)
+library(bigmemory)
+```
+
+```{r}
+#######################################################
+# The second example
+# MNIST examples
+# 70000 * 28 * 28
+
+set.seed(1234)
+```
+
+```{r}
+# read mnist samples
+inputpath = "G:/Phd/Data/MNIST/mnist/"
+# xbm.mnist = read.big.matrix(paste0(inputpath, "images.csv"), has.row.names =  TRUE, type = "double", skip = 1)
+```
+
+```{r}
+# DO PCA
+# p = 100
+# x.pca.mnist = prcomp(x=xbm.mnist[,], rank. = p)
+# write.csv(x=x.pca.mnist$x, file = paste0(inputpath, "images_pca.csv"))
+```
+
+```{r}
+xbmpca.mnist = read.big.matrix(paste0(inputpath, "images_pca.csv"), has.row.names =  TRUE, type = "double", skip = 1)
+y.mnist = read.big.matrix(paste0(inputpath, "labels.csv"), has.row.names = TRUE,
+                          type = "double", skip = 1)
+```
+
+## Experiment
+```{r}
+n = dim(xbmpca.mnist)[1]
+n_used = 70000
+num_exps = 10 # experiment numbers
+ms = c(100,200) # number of labeled samples
+res_list = lapply(c(1:(length(ms)*2)), function(i) {return(matrix(NA,nrow=8,ncol=num_exps))})
+```
+
+```{r}
+# hyper parameters
+s = 1000; r = 3; K = 200
+models = list(subsample="kmeans", kernel="lae", gl="cluster-normalized", root=TRUE)
+```
+
+```{r, include=FALSE}
+time_start = Sys.time()
+
+for(i in c(1:length(ms))) {
+
+for(num_exp in c(1:num_exps)) {
+  
+
+cat("\n\n##########################################################\n")  
+cat(paste0("When m = ",ms[i],", the ",num_exp, "-th experiment:\n\n"))
+  
+# classification
+m = ms[i]
+train.index = sample.int(n, m)
+test.index = sample(c(1:n)[-train.index],n_used-m)
+train.data = xbmpca.mnist[train.index,]; test.data = xbmpca.mnist[test.index,]
+y_train.mnist = y.mnist[train.index]; y_new.mnist = y.mnist[test.index]
+
+# radial basis kernel function
+t1 = Sys.time()
+rbf.mnist = gausspr(x=train.data, y=as.factor(y_train.mnist), type="classification", scaled = FALSE)
+pred_prob.mnist = predict(rbf.mnist, test.data, type="probabilities")
+pred_label.mnist = apply(pred_prob.mnist, 1, function(x) {return(which.max(x)-1)})
+t2 = Sys.time()
+err.rbf.mnist = sum((y_new.mnist!=pred_label.mnist)^2)/(n_used-m)
+
+res_list[[2*i-1]][1,num_exp] = err.rbf.mnist
+res_list[[2*i]][1,num_exp] = as.numeric(t2-t1, units="hours")*3600
+
+# ksvm
+t1 = Sys.time()
+ksvm.mnist = ksvm(x=train.data, y=as.factor(y_train.mnist), 
+            type="C-svc")
+pred_label.ksvm.mnist = predict(ksvm.mnist, test.data)
+t2 = Sys.time()
+err.ksvm.mnist = sum((y_new.mnist!=pred_label.ksvm.mnist)^2)/(n_used-m)
+
+res_list[[2*i-1]][2,num_exp] = err.ksvm.mnist
+res_list[[2*i]][2,num_exp] = as.numeric(t2-t1, units="hours")*3600
+
+
+# FLAG
+
+
+# GLGP
+if(n_used==7000) {
+t1 = Sys.time()
+y_gl.mnist = fit_gl_logit_mult_gp_rcpp(train.data, y_train.mnist, test.data, K,
+                                         sparse = FALSE, models = models)
+t2 = Sys.time()
+err_gl.mnist = sum((y_new.mnist!=y_gl.mnist$test)^2)/(n_used-m)
+
+res_list[[2*i-1]][3,num_exp] = err_gl.mnist
+res_list[[2*i]][3,num_exp] = as.numeric(t2-t1, units="hours")*3600
+}
+
+
+
+if(FALSE){
+# sparseGLGP
+if(n_used==70000) {threshold = 0.001} else if(n_used==7000) {threshold = 0.01}
+
+t1 = Sys.time()
+y_glsp.mnist = fit_gl_logit_mult_gp_rcpp(train.data, y_train.mnist, test.data, K, threshold = threshold, sparse = TRUE, models = models)
+t2 = Sys.time()
+err_glsp.mnist = sum((y_new.mnist!=y_glsp.mnist$test)^2)/(n_used-m)
+
+res_list[[2*i-1]][3,num_exp] = err_glsp.mnist
+res_list[[2*i]][3,num_exp] = as.numeric(t2-t1, units="hours")*3600
+}
+
+# Nystrom extension
+t1 = Sys.time()
+y_nystrom.mnist = fit_nystrom_logit_mult_gp_rcpp(train.data, y_train.mnist, test.data, s, K, models = models)
+t2 = Sys.time()
+err_nystrom.mnist = sum((y_new.mnist!=y_nystrom.mnist$test)^2)/(n_used-m)
+
+res_list[[2*i-1]][4,num_exp] = err_nystrom.mnist
+res_list[[2*i]][4,num_exp] = as.numeric(t2-t1, units="hours")*3600
+
+# SRFLAG
+models$subsample = "random"; models$gl = "normalized"
+t1 = Sys.time()
+y_srflag.mnist = fit_se_logit_mult_gp_rcpp(train.data, y_train.mnist, test.data, s, r, K, models = models)
+t2 = Sys.time()
+err_srflag.mnist = sum((y_new.mnist!=y_srflag.mnist$test)^2)/(n_used-m)
+
+res_list[[2*i-1]][5,num_exp] = err_srflag.mnist
+res_list[[2*i]][5,num_exp] = as.numeric(t2-t1, units="hours")*3600
+
+# SKFLAG
+models$subsample = "kmeans"; models$gl = "cluster-normalized"
+t1 = Sys.time()
+y_skflag.mnist = fit_se_logit_mult_gp_rcpp(train.data, y_train.mnist, test.data, s, r, K, models = models)
+t2 = Sys.time()
+err_skflag.mnist = sum((y_new.mnist!=y_skflag.mnist$test)^2)/(n_used-m)
+
+res_list[[2*i-1]][6,num_exp] = err_skflag.mnist
+res_list[[2*i]][6,num_exp] = as.numeric(t2-t1, units="hours")*3600
+
+
+# LRFLAG
+models$subsample = "random"; models$gl = "normalized"
+t1 = Sys.time()
+y_lrflag.mnist = fit_lae_logit_mult_gp_rcpp(train.data, y_train.mnist, test.data, s, r, K, models = models)
+t2 = Sys.time()
+err_lrflag.mnist = sum((y_new.mnist!=y_lrflag.mnist$test)^2)/(n_used-m)
+
+res_list[[2*i-1]][7,num_exp] = err_lrflag.mnist
+res_list[[2*i]][7,num_exp] = as.numeric(t2-t1, units="hours")*3600
+
+
+# LKFLAG
+models$subsample = "kmeans"; models$gl = "cluster-normalized"
+t1 = Sys.time()
+y_lkflag.mnist = fit_lae_logit_mult_gp_rcpp(train.data, y_train.mnist, test.data, s, r, K, models = models)
+t2 = Sys.time()
+err_lkflag.mnist = sum((y_new.mnist!=y_lkflag.mnist$test)^2)/(n_used-m)
+
+res_list[[2*i-1]][8,num_exp] = err_lkflag.mnist
+res_list[[2*i]][8,num_exp] = as.numeric(t2-t1, units="hours")*3600
+
+gc()
+
+}
+  
+}
+
+time_end = Sys.time()
+time_diff = time_end - time_start
+```
+
+```{r}
+print(time_diff)
+# Time difference of 36.04668 mins
+# Time difference of 1.412495 hours
+```
+
+
+## manipulate results
+```{r}
+cat("The number of total samples is n_used = ",n_used,":\n", sep = "")
+res_table = as.data.frame(matrix(0,nrow=8,ncol=length(ms)*2))
+colnames(res_table) = rep(c("error rates", "time"), length(ms))
+rownames(res_table) = c("RBF GP", "RBF KSVM", "GLGP", "Nystrom extension", 
+                        "SRFLAG", "SKFLAG", "LRFLAG", "LKFLAG")
+
+mydigits = 1
+for(i in c(1:length(ms))) {
+  # time
+  res_table[,(2*i)] = round(rowMeans(res_list[[(2*i)]]), digits = mydigits)
+  
+  error_mean = round(rowMeans(res_list[[(2*i-1)]])*100, digits = mydigits)
+  error_std = round(apply(res_list[[(2*i-1)]]*100, 1, sd), digits = mydigits)
+  for(j in c(1:8)) {
+    res_table[j,(2*i-1)] = paste0(error_mean[j],"(",error_std[j],")")
+  }
+}
+
+```
+
+```{r}
+write.csv(res_table, paste0("tables/mnist/",n_used,".csv"))
+print(res_table)
+```
+
