@@ -12,7 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 + read data 
 
 ```{r}
-library(FLAG)
+library(FLGP)
 library(kernlab)
 library(bigmemory)
 ```
@@ -91,7 +91,7 @@ res_list[[3*i-1]][1,num_exp] = mse_test.rbf.hcp
 res_list[[3*i]][1,num_exp] = as.numeric(t2-t1, units="hours")*3600
 
 
-# SRFLAG
+# SRFLGP
 models$subsample = "random"; models$gl = "normalized"
 t1 = Sys.time()
 y_srflag.hcp = fit_se_regression_gp_rcpp(X.train, y.train, X.test, s, r, K, models = models)
@@ -106,7 +106,7 @@ res_list[[3*i-2]][2,num_exp] = mse_train.srflag.hcp
 res_list[[3*i-1]][2,num_exp] = mse_test.srflag.hcp
 res_list[[3*i]][2,num_exp] = as.numeric(t2-t1, units="hours")*3600
 
-# SKFLAG
+# SKFLGP
 models$subsample = "kmeans"; models$gl = "cluster-normalized"
 t1 = Sys.time()
 y_skflag.hcp = fit_se_regression_gp_rcpp(X.train, y.train, X.test, s, r, K, models = models)
@@ -121,7 +121,7 @@ res_list[[3*i-2]][3,num_exp] = mse_train.skflag.hcp
 res_list[[3*i-1]][3,num_exp] = mse_test.skflag.hcp
 res_list[[3*i]][3,num_exp] = as.numeric(t2-t1, units="hours")*3600
 
-# LRFLAG
+# LRFLGP
 models$subsample = "random"; models$gl = "normalized"
 t1 = Sys.time()
 y_lrflag.hcp = fit_lae_regression_gp_rcpp(X.train, y.train, X.test, s, r, K, models = models)
@@ -137,7 +137,7 @@ res_list[[3*i-1]][4,num_exp] = mse_test.lrflag.hcp
 res_list[[3*i]][4,num_exp] = as.numeric(t2-t1, units="hours")*3600
 }
 
-# LKFLAG
+# LKFLGP
 models$subsample = "kmeans"; models$gl = "cluster-normalized"
 t1 = Sys.time()
 res_lkflag.hcp = fit_lae_regression_gp_rcpp(X.train, y.train, X.test, s, r, K, models = models, noise = "different")
@@ -169,7 +169,7 @@ print(time_diff)
 cat("The number of total samples is n_used = ",n_used,":\n", sep = "")
 res_table = as.data.frame(matrix(0,nrow=5,ncol=length(ms)*3))
 colnames(res_table) = rep(c("train mse", "test mse", "time"), length(ms))
-rownames(res_table) = c("RBF GP", "SRFLAG", "SKFLAG", "LRFLAG", "LKFLAG")
+rownames(res_table) = c("RBF GP", "SRFLGP", "SKFLGP", "LRFLGP", "LKFLGP")
 
 mydigits = 4
 

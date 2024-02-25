@@ -12,7 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 + read data 
 
 ```{r}
-library(FLAG)
+library(FLGP)
 library(kernlab)
 library(bigmemory)
 library(oro.nifti)

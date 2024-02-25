@@ -12,7 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 + read data 
 
 ```{r}
-library(FLAG)
+library(FLGP)
 library(kernlab)
 library(readxl)
 library(ggplot2)
@@ -121,7 +121,7 @@ res_list[[3*i-1]][5,num_exp] = mse_test_act.nystrom.hcp
 res_list[[3*i]][2,num_exp] = as.numeric(t2-t1, units="hours")*3600
 
 
-# LKFLAG
+# LKFLGP
 models$subsample = "kmeans"; models$gl = "cluster-normalized"
 t1 = Sys.time()
 res_lkflag.hcp = fit_lae_regression_gp_rcpp(X.train, y.train, X.test, s, r, K, models = models, noise = "same")
@@ -150,7 +150,7 @@ gc()
 cat("The number of total samples is n = ",n,":\n", sep = "")
 res_table = as.data.frame(matrix(0,nrow=6,ncol=length(ms)*3))
 colnames(res_table) = rep(c("train mse", "test mse", "time"), length(ms))
-rownames(res_table) = c("RBF GP", "Nystrom", "LKFLAG", "Act RBF", "Act Nystrom", "Act LK")
+rownames(res_table) = c("RBF GP", "Nystrom", "LKFLGP", "Act RBF", "Act Nystrom", "Act LK")
 
 mydigits = 3
 

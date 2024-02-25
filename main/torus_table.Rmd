@@ -13,7 +13,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(ggplot2)
 library(ggpubr)
 library(kernlab)
-library(FLAG)
+library(FLGP)
 ```
 
 ```{r}
@@ -137,7 +137,7 @@ err_nystrom.torus = sum((f_test.torus!=y_pred_nystrom.torus$test)^2)/(n-m)
 res_list[[2*i-1]][5,num_exp] = err_nystrom.torus
 res_list[[2*i]][5,num_exp] = as.numeric(t2-t1, units="hours")*3600
 
-# SRFLAG
+# SRFLGP
 models$subsample = "random"; models$gl = "normalized"
 t1 = Sys.time()
 res_srflag.torus = fit_se_logit_gp_rcpp(X.scale.torus[1:m,], f.torus, X.scale.torus[(m+1):n,], s, r, K, models = models, output_cov = FALSE)
@@ -148,7 +148,7 @@ err_srflag.torus = sum((f_test.torus!=y_pred_srflag.torus$test)^2)/(n-m)
 res_list[[2*i-1]][6,num_exp] = err_srflag.torus
 res_list[[2*i]][6,num_exp] = as.numeric(t2-t1, units="hours")*3600
 
-# SKFLAG
+# SKFLGP
 models$subsample = "kmeans"; models$gl = "cluster-normalized"
 t1 = Sys.time()
 res_skflag.torus = fit_se_logit_gp_rcpp(X.scale.torus[1:m,], f.torus, X.scale.torus[(m+1):n,], s, r, K, models = models, output_cov = FALSE)
@@ -160,7 +160,7 @@ res_list[[2*i-1]][7,num_exp] = err_skflag.torus
 res_list[[2*i]][7,num_exp] = as.numeric(t2-t1, units="hours")*3600
 
 
-# LRFLAG
+# LRFLGP
 models$subsample = "random"; models$gl = "normalized"
 t1 = Sys.time()
 res_lrflag.torus = fit_lae_logit_gp_rcpp(X.scale.torus[1:m,], f.torus, X.scale.torus[(m+1):n,], s, r, K, models = models, output_cov = FALSE)
@@ -172,7 +172,7 @@ res_list[[2*i-1]][8,num_exp] = err_lrflag.torus
 res_list[[2*i]][8,num_exp] = as.numeric(t2-t1, units="hours")*3600
 
 
-# LKFLAG
+# LKFLGP
 models$subsample = "kmeans"; models$gl = "cluster-normalized"
 t1 = Sys.time()
 res_lkflag.torus = fit_lae_logit_gp_rcpp(X.scale.torus[1:m,], f.torus, X.scale.torus[(m+1):n,], s, r, K, models = models, output_cov = FALSE)
@@ -205,7 +205,7 @@ cat("The number of total samples is n = ",n,":\n", sep = "")
 res_table = as.data.frame(matrix(0,nrow=9,ncol=4))
 colnames(res_table) = c("error rates", "time", "error rates", "time")
 rownames(res_table) = c("RBF GP", "RBF KSVM", "GLGP", "sparseGLGP", "Nystrom extension", 
-                        "SRFLAG", "SKFLAG", "LRFLAG", "LKFLAG")
+                        "SRFLGP", "SKFLGP", "LRFLGP", "LKFLGP")
 
 res_table[,2] = round(rowMeans(res_list[[2]]), digits = 2)
 res_table[,4] = round(rowMeans(res_list[[4]]), digits = 2)

@@ -11,7 +11,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r}
 library(kernlab)
-library(FLAG)
+library(FLGP)
 library(microbenchmark)
 ```
 
@@ -66,7 +66,7 @@ err.ksvm.usps
 
 
 ```{r}
-# FLAG
+# FLGP
 # process data
 y.usps = train.data.usps[,d]
 y_new.usps = test.data.usps[,d]
@@ -79,9 +79,9 @@ models = list(subsample="kmeans", kernel="lae", gl="cluster-normalized", root=TR
 ```
 
 
-+ LKFLAG
++ LKFLGP
 ```{r}
-# LKFLAG
+# LKFLGP
 models$subsample = "kmeans"; models$gl = "cluster-normalized"
 ```
 
@@ -100,9 +100,9 @@ err_lkflag.usps
 # 0.07203449
 ```
 
-+ SKFLAG
++ SKFLGP
 ```{r}
-# SKFLAG
+# SKFLGP
 models$subsample = "kmeans"; models$gl = "cluster-normalized"
 ```
 

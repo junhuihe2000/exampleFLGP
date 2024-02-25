@@ -1,24 +1,24 @@
-\name{exampleEigen-package}
-\alias{exampleEigen-package}
-\alias{exampleEigen}
+\name{exampleFLGP-package}
+\alias{exampleFLGP-package}
+\alias{exampleFLGP}
 \docType{package}
 \title{
-\packageTitle{exampleEigen}
+\packageTitle{exampleFLGP}
 }
 \description{
-\packageDescription{exampleEigen}
+\packageDescription{exampleFLGP}
 }
 \details{
 
 The DESCRIPTION file:
-\packageDESCRIPTION{exampleEigen}
-\packageIndices{exampleEigen}
+\packageDESCRIPTION{exampleFLGP}
+\packageIndices{exampleFLGP}
 ~~ An overview of how to use the package, including the most important functions ~~
 }
 \author{
-\packageAuthor{exampleEigen}
+\packageAuthor{exampleFLGP}
 
-Maintainer: \packageMaintainer{exampleEigen}
+Maintainer: \packageMaintainer{exampleFLGP}
 }
 \references{
 ~~ Literature or other references for background information ~~

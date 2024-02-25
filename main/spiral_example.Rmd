@@ -10,7 +10,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r}
-library(FLAG)
+library(FLGP)
 library(kernlab)
 library(ggplot2)
 library(latex2exp)
@@ -71,7 +71,7 @@ sqrt(sum((Y.test-mean(Yobs.train))^2)/(n-m))
 s = 500; r = 3; K = 100
 ```
 
-+ LKFLAG
++ LKFLGP
 
 ```{r}
 t1 = Sys.time()
@@ -92,7 +92,7 @@ ggplot() + geom_point(aes(X.test[,1],X.test[,2],color=Y_pred_lkflag$test)) +
   geom_point(aes(X.train[,1],X.train[,2]),color="black", size=0.7)
 ```
 
-+ SKFLAG
++ SKFLGP
 
 ```{r}
 t1 = Sys.time()

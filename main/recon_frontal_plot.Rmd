@@ -12,7 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 + read data 
 
 ```{r}
-library(FLAG)
+library(FLGP)
 library(kernlab)
 library(readxl)
 library(ggplot2)
@@ -103,7 +103,7 @@ mse_test_act.nystrom.hcp = sum((y.test[abs(y.test)>act]-test_pred_nystrom.hcp[ab
 
 
 
-# LKFLAG
+# LKFLGP
 models$subsample = "kmeans"; models$gl = "cluster-normalized"
 t1 = Sys.time()
 res_lkflag.hcp = fit_lae_regression_gp_rcpp(X.train, y.train, X.test, s, r, K, models = models, noise = "same")
@@ -173,7 +173,7 @@ p3.reg <- ggplot() + geom_point(aes(mydata[,1],mydata[,2],color=y.nystrom[idx]),
 ggsave(paste0("plots/hcp/frontal/nystrom.pdf"),p3.reg)
 ```
 
-+ LKFLAG
++ LKFLGP
 ```{r}
 p4.reg <- ggplot() + geom_point(aes(mydata[,1],mydata[,2],color=y.lkflag[idx]),size=0.8) +
   scale_color_gradientn(colours = c("blue","green","red"),limits=rng.reg) +
@@ -221,7 +221,7 @@ p2.dif <- ggplot() + geom_point(aes(mydata[,1],mydata[,2],color=y.nystrom[idx]-y
 ggsave(paste0("plots/hcp/frontal/diff_nystrom.pdf"),p2.dif)
 ```
 
-+ LKFLAG
++ LKFLGP
 ```{r}
 p3.dif <- ggplot() + geom_point(aes(mydata[,1],mydata[,2],color=y.lkflag[idx]-y[idx]),size=0.8) +
   scale_color_gradientn(colours = c("blue","green","red"),limits=rng.dif) +

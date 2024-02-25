@@ -11,7 +11,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r}
 library(kernlab)
-library(FLAG)
+library(FLGP)
 library(microbenchmark)
 library(bigmemory)
 ```
@@ -100,7 +100,7 @@ res_list[[2*i-1]][2,num_exp] = err.ksvm.mnist
 res_list[[2*i]][2,num_exp] = as.numeric(t2-t1, units="hours")*3600
 
 
-# FLAG
+# FLGP
 
 
 # GLGP
@@ -139,7 +139,7 @@ err_nystrom.mnist = sum((y_new.mnist!=y_nystrom.mnist$test)^2)/(n_used-m)
 res_list[[2*i-1]][4,num_exp] = err_nystrom.mnist
 res_list[[2*i]][4,num_exp] = as.numeric(t2-t1, units="hours")*3600
 
-# SRFLAG
+# SRFLGP
 models$subsample = "random"; models$gl = "normalized"
 t1 = Sys.time()
 y_srflag.mnist = fit_se_logit_mult_gp_rcpp(train.data, y_train.mnist, test.data, s, r, K, models = models)
@@ -149,7 +149,7 @@ err_srflag.mnist = sum((y_new.mnist!=y_srflag.mnist$test)^2)/(n_used-m)
 res_list[[2*i-1]][5,num_exp] = err_srflag.mnist
 res_list[[2*i]][5,num_exp] = as.numeric(t2-t1, units="hours")*3600
 
-# SKFLAG
+# SKFLGP
 models$subsample = "kmeans"; models$gl = "cluster-normalized"
 t1 = Sys.time()
 y_skflag.mnist = fit_se_logit_mult_gp_rcpp(train.data, y_train.mnist, test.data, s, r, K, models = models)
@@ -160,7 +160,7 @@ res_list[[2*i-1]][6,num_exp] = err_skflag.mnist
 res_list[[2*i]][6,num_exp] = as.numeric(t2-t1, units="hours")*3600
 
 
-# LRFLAG
+# LRFLGP
 models$subsample = "random"; models$gl = "normalized"
 t1 = Sys.time()
 y_lrflag.mnist = fit_lae_logit_mult_gp_rcpp(train.data, y_train.mnist, test.data, s, r, K, models = models)
@@ -171,7 +171,7 @@ res_list[[2*i-1]][7,num_exp] = err_lrflag.mnist
 res_list[[2*i]][7,num_exp] = as.numeric(t2-t1, units="hours")*3600
 
 
-# LKFLAG
+# LKFLGP
 models$subsample = "kmeans"; models$gl = "cluster-normalized"
 t1 = Sys.time()
 y_lkflag.mnist = fit_lae_logit_mult_gp_rcpp(train.data, y_train.mnist, test.data, s, r, K, models = models)
@@ -204,7 +204,7 @@ cat("The number of total samples is n_used = ",n_used,":\n", sep = "")
 res_table = as.data.frame(matrix(0,nrow=8,ncol=length(ms)*2))
 colnames(res_table) = rep(c("error rates", "time"), length(ms))
 rownames(res_table) = c("RBF GP", "RBF KSVM", "GLGP", "Nystrom extension", 
-                        "SRFLAG", "SKFLAG", "LRFLAG", "LKFLAG")
+                        "SRFLGP", "SKFLGP", "LRFLGP", "LKFLGP")
 
 mydigits = 1
 for(i in c(1:length(ms))) {

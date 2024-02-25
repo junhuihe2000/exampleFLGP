@@ -13,7 +13,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(ggplot2)
 library(ggpubr)
 library(kernlab)
-library(FLAG)
+library(FLGP)
 library(pryr)
 library(lineprof)
 ```
@@ -115,7 +115,7 @@ pksvm = ggplot() + geom_point(aes(test.data[,1],test.data[,2],color=pred_label.k
 ```
 
 ```{r}
-# FLAG
+# FLGP
 # process data
 torus.order = torus.df[c(train.index, test.index), ]
 X.scale.torus = scale(as.matrix(torus.order[ ,1:(d-1)]), center = TRUE, scale = TRUE)
@@ -205,9 +205,9 @@ p5.cla = ggplot() + geom_point(aes(test.data[,1],test.data[,2],color=y_pred_nyst
   ggtitle("")
 ```
 
-+ SRFLAG
++ SRFLGP
 ```{r}
-# SRFLAG
+# SRFLGP
 models$subsample = "random"; models$gl = "normalized"
 ```
 
@@ -234,9 +234,9 @@ p6.cla = ggplot() + geom_point(aes(test.data[,1],test.data[,2],color=y_pred_srfl
   ggtitle("")
 ```
 
-+ SKFLAG
++ SKFLGP
 ```{r}
-# SKFLAG
+# SKFLGP
 models$subsample = "kmeans"; models$gl = "cluster-normalized"
 ```
 
@@ -263,9 +263,9 @@ p7.cla = ggplot() + geom_point(aes(test.data[,1],test.data[,2],color=y_pred_skfl
   ggtitle("")
 ```
 
-+ LRFLAG
++ LRFLGP
 ```{r}
-# LRFLAG
+# LRFLGP
 models$subsample = "random"; models$gl = "normalized"
 ```
 
@@ -292,9 +292,9 @@ p8.cla = ggplot() + geom_point(aes(test.data[,1],test.data[,2],color=y_pred_lrfl
   ggtitle("")
 ```
 
-+ LKFLAG
++ LKFLGP
 ```{r}
-# LKFLAG
+# LKFLGP
 models$subsample = "kmeans"; models$gl = "cluster-normalized"
 ```
 
@@ -405,7 +405,7 @@ p5.cov = ggplot() + geom_point(aes(torus.order[,1],torus.order[,2],color=cov_nys
   theme(axis.text = element_text(size=7),legend.key.width = unit(0.3, "cm"))
 ```
 
-+ SRFLAG
++ SRFLGP
 ```{r}
 H_srflag.torus = res_srflag.torus$C
 cov_srflag.torus = H_srflag.torus[, k]/H_srflag.torus[k,k]
@@ -417,7 +417,7 @@ p6.cov = ggplot() + geom_point(aes(torus.order[,1],torus.order[,2],color=cov_srf
   theme(axis.text = element_text(size=7),legend.key.width = unit(0.3, "cm"))
 ```
 
-+ SKFLAG
++ SKFLGP
 ```{r}
 H_skflag.torus = res_skflag.torus$C
 cov_skflag.torus = H_skflag.torus[, k]/H_skflag.torus[k,k]
@@ -429,7 +429,7 @@ p7.cov = ggplot() + geom_point(aes(torus.order[,1],torus.order[,2],color=cov_skf
   theme(axis.text = element_text(size=7),legend.key.width = unit(0.3, "cm"))
 ```
 
-+ LRFLAG
++ LRFLGP
 ```{r}
 H_lrflag.torus = res_lrflag.torus$C
 cov_lrflag.torus = H_lrflag.torus[, k]/H_lrflag.torus[k,k]
@@ -441,7 +441,7 @@ p8.cov = ggplot() + geom_point(aes(torus.order[,1],torus.order[,2],color=cov_lrf
   theme(axis.text = element_text(size=7),legend.key.width = unit(0.3, "cm"))
 ```
 
-+ LKFLAG
++ LKFLGP
 ```{r}
 H_lkflag.torus = res_lkflag.torus$C
 cov_lkflag.torus = H_lkflag.torus[, k]/H_lkflag.torus[k,k]

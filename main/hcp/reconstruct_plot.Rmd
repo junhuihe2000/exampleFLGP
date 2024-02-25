@@ -12,7 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 + read data 
 
 ```{r}
-library(FLAG)
+library(FLGP)
 library(kernlab)
 library(ggplot2)
 library(bigmemory)
@@ -72,7 +72,7 @@ y.train[is.na(y.train)] = 0
 test.hcp = !is.na(y.test)
 
 
-# LKFLAG
+# LKFLGP
 models$subsample = "kmeans"; models$gl = "cluster-normalized"
 t1 = Sys.time()
 y_lkflag.hcp = fit_lae_regression_gp_rcpp(X.train, y.train, X.test, s, r, K, models = models)
@@ -147,7 +147,7 @@ plot.df$dataset = as.factor(c(rep("train",length(ms)), rep("test",length(ms))))
 ggplot(data=plot.df,aes(x=log(m),y=mse,color=dataset)) + geom_smooth(se=FALSE) +
   geom_hline(yintercept = min(res_table$`test mse`)) +
   scale_y_continuous(breaks = c(0.03, 0.04, min(res_table$`test mse`), 0.05, 0.06, 0.07, 0.08), 
-                     labels = c(0.03, 0.04, round(min(res_table$`test mse`),4), 0.05, 0.06, 0.07, 0.08)) + labs(title = "MSE of LKFLAG in the neuroimaging reconstruction with 917 subjects", y = "MSE", x = "The logarithm of the number of training samples")
+                     labels = c(0.03, 0.04, round(min(res_table$`test mse`),4), 0.05, 0.06, 0.07, 0.08)) + labs(title = "MSE of LKFLGP in the neuroimaging reconstruction with 917 subjects", y = "MSE", x = "The logarithm of the number of training samples")
 ggsave(paste0("plots/mul_rec_mse.pdf"))
 ```
 

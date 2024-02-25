@@ -10,7 +10,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r}
-library(FLAG)
+library(FLGP)
 library(kernlab)
 library(bigmemory)
 ```
@@ -68,12 +68,12 @@ sum((y.train-mean(y.train))^2)/m
 
 
 ```{r}
-# hyper parameters in FLAG
+# hyper parameters in FLGP
 s = 100; r = 100; K = 50
 models = list(subsample="random", kernel="lae", gl="normalized", root=TRUE)
 ```
 
-+ LKFLAG
++ LKFLGP
 
 ```{r}
 t1 = Sys.time()
@@ -89,7 +89,7 @@ mse_lkflag.gca
 # 0.09683834
 ```
 
-+ SKFLAG
++ SKFLGP
 
 ```{r}
 t1 = Sys.time()

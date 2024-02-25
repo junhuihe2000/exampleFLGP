@@ -11,7 +11,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r}
 library(kernlab)
-library(FLAG)
+library(FLGP)
 library(microbenchmark)
 library(bigmemory)
 ```
@@ -88,7 +88,7 @@ err.ksvm.mnist
 # 0.4072675
 ```
 
-+ FLAG
++ FLGP
 
 ```{r}
 # hyper parameters
@@ -96,9 +96,9 @@ s = 2000; r = 3; K = 200
 models = list(subsample="kmeans", kernel="lae", gl="cluster-normalized", root=TRUE)
 ```
 
-+ LKFLAG
++ LKFLGP
 ```{r}
-# LKFLAG
+# LKFLGP
 models$subsample = "kmeans"; models$gl = "cluster-normalized"
 ```
 
@@ -117,9 +117,9 @@ err_lkflag.mnist
 # 0.09150215
 ```
 
-+ LRFLAG
++ LRFLGP
 ```{r}
-# LKFLAG
+# LKFLGP
 models$subsample = "random"; models$gl = "normalized"
 ```
 
@@ -138,9 +138,9 @@ err_lrflag.mnist
 # 0.2334478
 ```
 
-+ SKFLAG
++ SKFLGP
 ```{r}
-# SKFLAG
+# SKFLGP
 models$subsample = "kmeans"; models$gl = "cluster-normalized"
 ```
 
@@ -158,9 +158,9 @@ err_skflag.mnist
 # 0.09586552
 ```
 
-+ SRFLAG
++ SRFLGP
 ```{r}
-# SRFLAG
+# SRFLGP
 models$subsample = "random"; models$gl = "normalized"
 ```
 
