@@ -13,6 +13,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(FLGP)
 library(kernlab)
 library(ggplot2)
+library(ggpubr)
 library(latex2exp)
 ```
 
@@ -31,7 +32,7 @@ Y = 3*sin(theta/10) + 3*cos(theta/2) + 4*sin(4*theta/5)
 ```
 
 
-```{r,include=FALSE}
+```{r}
 ggplot() + geom_point(aes(X[,1],X[,2]),size=0.5) +
   xlab(TeX("$X_1$")) + ylab(TeX("$X_2$"))
 ggsave("plots/spiral/allpoints.pdf")
@@ -42,7 +43,7 @@ s = 200
 I = subsample_cpp(X, s)
 ```
 
-```{r,include=FALSE}
+```{r}
 ggplot() + geom_point(aes(I[,1],I[,2]),size=0.5) +
   xlab(TeX("$X_1$")) + ylab(TeX("$X_2$"))
 ggsave("plots/spiral/subsamplepoints.pdf")
@@ -55,7 +56,7 @@ ggplot() + geom_point(aes(X[,1],X[,2],color=Y)) +
 
 
 ```{r}
-m = 500
+m = 200
 train.index = sample.int(n,m); test.index = c(1:n)[-train.index]
 X.train = X[train.index,]; Y.train = Y[train.index]
 X.test = X[test.index,]; Y.test = Y[test.index]
@@ -68,7 +69,7 @@ sqrt(sum((Y.test-mean(Yobs.train))^2)/(n-m))
 
 
 ```{r}
-s = 500; r = 3; K = 100
+s = 200; r = 3; K = 100
 ```
 
 + LKFLGP
@@ -82,13 +83,13 @@ t2-t1
 
 ```{r}
 Y_pred_lkflag = res_pred_lkflag$Y_pred
-sqrt(sum((Y.train-Y_pred_lkflag$train)^2)/(n-m))
+# sqrt(sum((Y.train-Y_pred_lkflag$train)^2)/(n-m))
 sqrt(sum((Y.test-Y_pred_lkflag$test)^2)/(n-m))
 ```
 
 ```{r}
 ggplot() + geom_point(aes(X.test[,1],X.test[,2],color=Y_pred_lkflag$test)) +
-  scale_color_gradientn(colours = rainbow(10)) +
+  scale_color_gradientn(colours = rainbow(10)) + 
   geom_point(aes(X.train[,1],X.train[,2]),color="black", size=0.7)
 ```
 
@@ -128,6 +129,47 @@ ggplot() + geom_point(aes(X.test[,1],X.test[,2],color=Y_pred_rbf)) +
   scale_color_gradientn(colours = rainbow(10)) +
   geom_point(aes(X.train[,1],X.train[,2]),color="black", size=0.7)
 ```
+
++ Plot in one page
+
+```{r}
+range_y = range(Y, Yobs.train, Y_pred_lkflag, Y_pred_rbf)
+```
+
+```{r}
+# ground truth
+p1 <- ggplot() + geom_point(aes(X[,1],X[,2],color=Y),size=0.5) +
+  scale_color_gradientn(colours = c("blue","green","red"),limits=range_y) +
+  xlab("") + ylab("") + ggtitle("") + labs(colour="") +
+  theme(plot.title = element_text(hjust = 0.5),legend.key.width = unit(1.5, "cm"))
+
+# output over training points
+p2 <- ggplot() + geom_point(aes(X.train[,1],X.train[,2],color=Yobs.train),size=0.5) +
+  scale_color_gradientn(colours = c("blue","green","red"),limits=range_y) +
+  xlab("") + ylab("") + ggtitle("") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# prediction by FLGP
+p3 <- ggplot() + geom_point(aes(X.test[,1],X.test[,2],color=Y_pred_lkflag$test),size=0.5) +
+  scale_color_gradientn(colours = c("blue","green","red"),limits=range_y) +
+  xlab("") + ylab("") + ggtitle("") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# prediction by RBF GP
+p4 <- ggplot() + geom_point(aes(X.test[,1],X.test[,2],color=Y_pred_rbf),size=0.5) +
+  scale_color_gradientn(colours = c("blue","green","red"),limits=range_y) +
+  xlab("") + ylab("") + ggtitle("") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
++ Arrange on one page
+```{r}
+plot.spiral = ggarrange(p1,p2,p3,p4,
+                    ncol=2,nrow=2,
+                    common.legend=TRUE)
+ggexport(plot.spiral, filename = "plots/spiral/prediction.pdf")
+```
+
 
 + GLGP
 
