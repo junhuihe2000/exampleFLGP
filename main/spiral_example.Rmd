@@ -19,6 +19,36 @@ library(latex2exp)
 
 + spiral case
 
++ Plot the spiral
+```{r}
+n.spiral = 4000
+theta.spiral = seq(0, 8*pi, length.out=n.spiral)
+X.spiral = cbind((theta.spiral+4)^(0.7)*cos(theta.spiral), (theta.spiral+4)^(0.7)*sin(theta.spiral))
+```
+
+```{r}
+p0 <- ggplot() + geom_path(aes(X.spiral[,1],X.spiral[,2]), color="gray") +
+  xlab("") + ylab("") + ggtitle("")
+
+n_start = 100; n_end = 2100
+
+p0 <- p0 + geom_point(aes(x=X.spiral[c(n_start,n_end),1],y=X.spiral[c(n_start,n_end),2]))
+
+# p0 <- p0 + geom_text(aes(x=X.spiral[n_start,1],y=X.spiral[n_start,2],label="x"),hjust=2,vjust=0.5)
+# p0 <- p0 + geom_text(aes(x=X.spiral[n_end,1],y=X.spiral[n_end,2],label="x'"),hjust=-0.5,vjust=-0.5)
+
+p0 <- p0 + geom_path(aes(X.spiral[n_start:n_end,1],X.spiral[n_start:n_end,2]), color="black", linewidth=1) +
+  xlab("") + ylab("") + ggtitle("")
+
+p0 <- p0 + geom_segment(aes(x=X.spiral[n_start,1],y=X.spiral[n_start,2],xend=X.spiral[n_end,1],yend=X.spiral[n_end,2]), color="black", linewidth=1, linetype="dashed") +
+  xlab("") + ylab("") + ggtitle("")
+
+ggsave("plots/spiral/manifold.pdf")
+```
+
+
+
++ Simulation
 ```{r}
 set.seed(1234)
 ```
@@ -164,11 +194,19 @@ p4 <- ggplot() + geom_point(aes(X.test[,1],X.test[,2],color=Y_pred_rbf),size=0.5
 
 + Arrange on one page
 ```{r}
-plot.spiral = ggarrange(p1,p2,p3,p4,
+plot.pred = ggarrange(p1,p2,p3,p4,
                     ncol=2,nrow=2,
                     common.legend=TRUE)
-ggexport(plot.spiral, filename = "plots/spiral/prediction.pdf")
+ggexport(plot.pred, filename = "plots/spiral/prediction.pdf")
 ```
+
+```{r}
+plot.spiral = ggarrange(p0,p1,p3,p4,
+                    ncol=2,nrow=2,
+                    common.legend=TRUE)
+ggexport(plot.spiral, filename = "plots/spiral/spiral.pdf")
+```
+
 
 
 + GLGP
