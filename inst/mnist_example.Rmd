@@ -1,0 +1,212 @@
+---
+title: "MNIST example"
+author: "He Junhui"
+date: '`r Sys.Date()`'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(kernlab)
+library(FLGP)
+library(microbenchmark)
+library(bigmemory)
+```
+
+```{r}
+#######################################################
+# The second example
+# MNIST examples
+# 70000 * 28 * 28
+
+set.seed(1234)
+```
+
+```{r}
+# read mnist samples
+inputpath = "G:/Phd/Data/MNIST/mnist/"
+# xbm.mnist = read.big.matrix(paste0(inputpath, "images.csv"), has.row.names =  TRUE, type = "double", skip = 1)
+```
+
+
+```{r}
+# DO PCA
+# p = 100
+# x.pca.mnist = prcomp(x=xbm.mnist[,], rank. = p)
+# write.csv(x=x.pca.mnist$x, file = paste0(inputpath, "images_pca.csv"))
+```
+
+```{r}
+xbmpca.mnist = read.big.matrix(paste0(inputpath, "images_pca.csv"), has.row.names =  TRUE, type = "double", skip = 1)
+y.mnist = read.big.matrix(paste0(inputpath, "labels.csv"), has.row.names = TRUE,
+                          type = "double", skip = 1)
+```
+
+
+```{r}
+# classification
+# divide training samples and testing samples
+
+# n = dim(xbmpca.mnist)[1] # 70000
+n = 70000
+d = dim(xbmpca.mnist)[2] # 100
+m = 100
+
+train.index.mnist = sample.int(n, m); test.index.mnist = c(1:n)[-train.index.mnist]
+train.data.mnist = xbmpca.mnist[train.index.mnist,]
+test.data.mnist = xbmpca.mnist[test.index.mnist, ]
+```
+
+```{r}
+y_train.mnist = y.mnist[train.index.mnist]
+y_new.mnist = y.mnist[test.index.mnist]
+```
+
++ Classification
+
+```{r}
+# radial basis kernel function
+rbf.mnist = gausspr(x=train.data.mnist, y=as.factor(y_train.mnist),
+                      type="classification", scaled = FALSE)
+pred_prob.mnist = predict(rbf.mnist, test.data.mnist, type="probabilities")
+pred_label.mnist = apply(pred_prob.mnist, 1, function(x) {return(which.max(x)-1)})
+err.rbf.mnist = sum((y_new.mnist!=pred_label.mnist)^2)/(n-m)
+err.rbf.mnist
+# 0.5721316
+```
+
+```{r}
+# ksvm
+ksvm.mnist = ksvm(x=train.data.mnist, y=as.factor(y_train.mnist), 
+                    type="C-svc", scaled = FALSE)
+pred_label.ksvm.mnist = predict(ksvm.mnist, test.data.mnist)
+err.ksvm.mnist = sum((y_new.mnist!=pred_label.ksvm.mnist)^2)/(n-m)
+err.ksvm.mnist
+# 0.4072675
+```
+
++ FLGP
+
+```{r}
+# hyper parameters
+s = 2000; r = 3; K = 200
+models = list(subsample="kmeans", kernel="lae", gl="cluster-normalized", root=TRUE)
+```
+
++ LKFLGP
+```{r}
+# LKFLGP
+models$subsample = "kmeans"; models$gl = "cluster-normalized"
+```
+
+
+```{r}
+t1 = Sys.time()
+y_lkflag.mnist = fit_lae_logit_mult_gp_rcpp(train.data.mnist, y_train.mnist, test.data.mnist, s, r, K, models = models)
+t2 = Sys.time()
+t2 - t1
+# Time difference of 20.44336 secs
+```
+
+```{r}
+err_lkflag.mnist = sum((y_new.mnist!=y_lkflag.mnist$test)^2)/(n-m)
+err_lkflag.mnist
+# 0.09150215
+```
+
++ LRFLGP
+```{r}
+# LKFLGP
+models$subsample = "random"; models$gl = "normalized"
+```
+
+
+```{r}
+t1 = Sys.time()
+y_lrflag.mnist = fit_lae_logit_mult_gp_rcpp(train.data.mnist, y_train.mnist, test.data.mnist, s, r, K, models = models)
+t2 = Sys.time()
+t2 - t1
+# Time difference of 5.835267 secs
+```
+
+```{r}
+err_lrflag.mnist = sum((y_new.mnist!=y_lrflag.mnist$test)^2)/(n-m)
+err_lrflag.mnist
+# 0.2334478
+```
+
++ SKFLGP
+```{r}
+# SKFLGP
+models$subsample = "kmeans"; models$gl = "cluster-normalized"
+```
+
+```{r}
+t1 = Sys.time()
+y_skflag.mnist = fit_se_logit_mult_gp_rcpp(train.data.mnist, y_train.mnist, test.data.mnist, s, r, K, models = models)
+t2 = Sys.time()
+t2 - t1
+# Time difference of 30.50837 secs
+```
+
+```{r}
+err_skflag.mnist = sum((y_new.mnist!=y_skflag.mnist$test)^2)/(n-m)
+err_skflag.mnist
+# 0.09586552
+```
+
++ SRFLGP
+```{r}
+# SRFLGP
+models$subsample = "random"; models$gl = "normalized"
+```
+
+```{r}
+t1 = Sys.time()
+y_srflag.mnist = fit_se_logit_mult_gp_rcpp(train.data.mnist, y_train.mnist, test.data.mnist, s, r, K, models = models)
+t2 = Sys.time()
+t2 - t1
+# Time difference of 14.88994 secs
+```
+
+```{r}
+err_srflag.mnist = sum((y_new.mnist!=y_srflag.mnist$test)^2)/(n-m)
+err_srflag.mnist
+# 0.1885265
+```
+
++ Nystrom extension
+```{r}
+# Nystrom extension
+t1 = Sys.time()
+y_nystrom.mnist = fit_nystrom_logit_mult_gp_rcpp(train.data.mnist, y_train.mnist, test.data.mnist, s, K, models = models)
+t2 = Sys.time()
+t2 - t1
+# Time difference of 2.402349 mins
+```
+
+```{r}
+err_nystrom.mnist = sum((y_new.mnist!=y_nystrom.mnist$test)^2)/(n-m)
+err_nystrom.mnist
+# 0.384392
+```
+
++ GLGP
+```{r}
+# sparseGLGP
+t1 = Sys.time()
+y_glsp.mnist = fit_gl_logit_mult_gp_rcpp(train.data.mnist, y_train.mnist, test.data.mnist, K,
+                                         sparse = FALSE, models = models)
+t2 = Sys.time()
+t2 - t1
+# Time difference of 7.454023 mins
+```
+
+```{r}
+err_glsp.mnist = sum((y_new.mnist!=y_glsp.mnist$test)^2)/(n-m)
+err_glsp.mnist
+# 0.1605866
+```

@@ -1,0 +1,88 @@
+---
+title: "Data summary in the frontal lobe example"
+author: "He Junhui"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(stringr)
+```
+
+
+```{r}
+index.subject = read.csv("G:/Phd/Data/HCPFMRI/index2bk-0bk.csv")
+```
+
+
+```{r}
+filepath = "tables/hcp/"
+nsub = 10
+```
+
+```{r}
+options(scipen=999)
+```
+
+
++ process Frontal Lobes data
+
+```{r}
+mse_train.frontal = matrix(0,6,4); mse_test.frontal = matrix(0,6,4)
+sd_train.frontal = matrix(0,6,4); sd_test.frontal = matrix(0,6,4)
+time.frontal = matrix(0,6,4)
+
+for(idx in c(1:nsub)) {
+  subject = index.subject$subject[idx]
+  data.frontal = read.csv(paste0(filepath,"frontal/",subject,".csv"))
+  for(i in c(1:4)) {
+    for(j in c(1:6)) {
+      train.reg = str_extract_all(data.frontal[j,(3*i-1)], "[^()]+")[[1]]
+      mse_train.frontal[j,i] = mse_train.frontal[j,i] + as.double(train.reg[1])
+      sd_train.frontal[j,i] = sd_train.frontal[j,i] + as.double(train.reg[2])
+      test.reg = str_extract_all(data.frontal[j,(3*i)], "[^()]+")[[1]]
+      mse_test.frontal[j,i] = mse_test.frontal[j,i] + as.double(test.reg[1])
+      sd_test.frontal[j,i] = sd_test.frontal[j,i] + as.double(test.reg[2])
+    }
+    time.frontal[1:3,i] = time.frontal[1:3,i] + data.frontal[1:3,(3*i+1)]
+  }
+}
+
+mydigits = 3
+mse_train.frontal = round(mse_train.frontal/nsub,digits = mydigits)
+mse_test.frontal = round(mse_test.frontal/nsub,digits=mydigits)
+sd_train.frontal = round(sd_train.frontal/nsub,digits=mydigits)
+sd_test.frontal = round(sd_test.frontal/nsub,digits=mydigits)
+time.frontal = round(time.frontal/nsub,digits=mydigits)
+```
+
+```{r}
+summary.frontal = as.data.frame(matrix(0,6,20))
+rownames(summary.frontal) = data.frontal[,1]
+colnames(summary.frontal) = rep(c("train mse", "train sd", "test mse", "test sd", "time"), 4)
+for(i in c(1:4)) {
+  summary.frontal[,((5*i-4):(5*i))] = cbind(mse_train.frontal[,i],sd_train.frontal[,i],
+                                            mse_test.frontal[,i],sd_test.frontal[,i],
+                                            time.frontal[,i])
+}
+# summary.frontal = round(summary.frontal,digits = 4)
+write.csv(summary.frontal, paste0(filepath,"frontal/summary_frontal.csv"))
+```
+
+```{r}
+summarycom.frontal = as.data.frame(matrix(0,6,12))
+rownames(summarycom.frontal) = data.frontal[,1]
+colnames(summarycom.frontal) = rep(c("train mse", "test mse", "time"), 4)
+for(i in c(1:4)) {
+  summarycom.frontal[,(3*i)] = time.frontal[,i]
+  for(j in c(1:6)) {
+    summarycom.frontal[j,(3*i-2)] = paste0(mse_train.frontal[j,i],"(",sd_train.frontal[j,i],")")
+    summarycom.frontal[j,(3*i-1)] = paste0(mse_test.frontal[j,i],"(",sd_test.frontal[j,i],")")
+  }
+}
+write.csv(summarycom.frontal, paste0(filepath,"frontal/summarycom_frontal.csv"))
+```
