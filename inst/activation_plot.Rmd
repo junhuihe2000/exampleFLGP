@@ -1,0 +1,287 @@
+---
+title: "Frontal Activation Plot"
+author: "He Junhui"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(oro.nifti)
+library(neurobase)
+library(readxl)
+library(FLGP)
+library(kernlab)
+library(ggplot2)
+library(ggpubr)
+library(plot3D)
+```
+
+## read data
+```{r}
+subject = "100206"
+data = read.csv(paste0("G:/Phd/Data/HCPFMRI/2bk-0bk/frontal/",subject,"_2bk-0bk_frontal.csv"))
+act_count = readnii(paste0("G:/Phd/Data/HCPFMRI/2bk-0bk/activated_90.nii"))
+```
+
+```{r}
+# Activated Location
+I = dim(data)[1]
+act_idx = rep(NA,I)
+act_idx = sapply(c(1:I), function(i) {
+  return(act_count[data[i,1],data[i,2],data[i,3]]>=3)
+})
+```
+
+```{r}
+data_act = data[act_idx,]
+X = as.matrix(data_act[,1:3])
+X = apply(X,2,function(x) {return((x-min(x))/(max(x)-min(x)))}) # coordinate transform
+y = data_act[,4]
+```
+
++ Truth
+```{r}
+pdf(file = "plots/hcp/act/truth_fMRI.pdf")
+mat = matrix(c(1,2,3,4),1,4,byrow = TRUE)
+layout(mat, widths = c(0.3,0.3,0.3,0.1))
+# layout.show(4)
+par(mar=c(0,1,0,2))
+scatter3D(X[,1], X[,2], X[,3],
+          theta = 20, phi = 30, colvar = y,
+          pch = 20, box=TRUE, cex = 0.2, colkey = FALSE, 
+          border="black", shade=0.8, alpha = 1,
+          bty = "g",
+          main="")
+scatter3D(X[,1], X[,2], X[,3],
+          theta = 50, phi = 40, colvar = y,
+          pch = 20, box=TRUE, cex = 0.2, colkey = FALSE, 
+          border="black", shade=0.8, alpha = 1,
+          bty = "g",
+          main="")
+scatter3D(X[,1], X[,2], X[,3],
+          theta = -30, phi = 30, colvar = y,
+          pch = 20, box=TRUE, cex = 0.2, colkey = FALSE, 
+          border="black", shade=0.8, alpha = 1,
+          bty = "g",
+          main="")
+colkey(clim = range(y),length = 0.2,width = 3,side=2)
+dev.off()
+```
+
+
+## Experiment
+```{r}
+set.seed(1234)
+```
+
+## Experiment
+```{r}
+n = nrow(X)
+m = 2000 # number of labeled samples
+a = 0.01
+```
+
+```{r}
+# hyper parameters
+s = 600; r = 3; K = 300
+models = list(subsample="kmeans", kernel="lae", gl="cluster-normalized", root=TRUE)
+```
+
+```{r, include=FALSE}
+time_start = Sys.time()
+  
+
+cat("\n\n##########################################################\n")  
+cat(paste0("When m = ",m,", n = ",n, ":\n\n"))
+
+train.index = sample.int(n, m)
+test.index = c(1:n)[-train.index]
+X.train = X[train.index,]; X.test = X[test.index,]
+y.train = y[train.index]; y.test = y[test.index]
+
+# radial basis kernel function
+t1 = Sys.time()
+rbf.hcp = gausspr(x=X.train, y=y.train)
+train_pred.hcp = predict(rbf.hcp, X.train)
+test_pred.hcp = predict(rbf.hcp, X.test)
+t2 = Sys.time()
+t2 - t1
+mse_train.rbf.hcp = mean((y.train-train_pred.hcp)^2)
+mse_test.rbf.hcp = mean((y.test-test_pred.hcp)^2)
+mse_test.rbf.win = mean(sort((y.test-test_pred.hcp)^2)[round((n-m)*a):round((n-m)*(1-a))])
+
+
+# GLGP
+t1 = Sys.time()
+res_glgp.hcp = fit_gl_regression_gp_rcpp(X.train, y.train, X.test, K, models = models, noise = "same", sigma = 1e-2, sparse = FALSE)
+t2 = Sys.time()
+t2 - t1
+y_glgp.hcp = res_glgp.hcp$Y_pred
+train_pred_glgp.hcp = y_glgp.hcp$train
+test_pred_glgp.hcp = y_glgp.hcp$test
+
+mse_train.glgp.hcp = mean((y.train-train_pred_glgp.hcp)^2)
+mse_test.glgp.hcp = mean((y.test-test_pred_glgp.hcp)^2)
+mse_test.glgp.win = mean(sort((y.test-test_pred_glgp.hcp)^2)[round((n-m)*a):round((n-m)*(1-a))])
+
+
+
+# Nystrom extension
+models$subsample = "kmeans"
+t1 = Sys.time()
+res_nystrom.hcp = fit_nystrom_regression_gp_rcpp(X.train, y.train, X.test, s, K, models = models, noise = "same", sigma = 1e-2)
+t2 = Sys.time()
+t2 - t1
+y_nystrom.hcp = res_nystrom.hcp$Y_pred
+train_pred_nystrom.hcp = y_nystrom.hcp$train
+test_pred_nystrom.hcp = y_nystrom.hcp$test
+
+mse_train.nystrom.hcp = mean((y.train-train_pred_nystrom.hcp)^2)
+mse_test.nystrom.hcp = mean((y.test-test_pred_nystrom.hcp)^2)
+mse_test.nystrom.win = mean(sort((y.test-test_pred_nystrom.hcp)^2)[round((n-m)*a):round((n-m)*(1-a))])
+
+
+
+# LKFLGP
+models$subsample = "kmeans"; models$gl = "cluster-normalized"
+t1 = Sys.time()
+res_lkflag.hcp = fit_lae_regression_gp_rcpp(X.train, y.train, X.test, s, r, K, models = models, noise = "same", sigma = 1e-2)
+t2 = Sys.time()
+t2 - t1
+y_lkflag.hcp = res_lkflag.hcp$Y_pred
+train_pred_lkflag.hcp = y_lkflag.hcp$train
+test_pred_lkflag.hcp = y_lkflag.hcp$test
+
+mse_train.lkflag.hcp = mean((y.train-train_pred_lkflag.hcp)^2)
+mse_test.lkflag.hcp = mean((y.test-test_pred_lkflag.hcp)^2)
+mse_test.lkflag.win = mean(sort((y.test-test_pred_lkflag.hcp)^2)[round((n-m)*a):round((n-m)*(1-a))])
+
+time_end = Sys.time()
+time_diff = time_end - time_start
+```
+
+```{r}
+print(time_diff)
+```
+
+```{r}
+mse_test.rbf.win
+mse_test.glgp.win
+mse_test.nystrom.win
+mse_test.lkflag.win
+```
+
+
+```{r}
+y.rbf = c(1:n); y.glgp = c(1:n); y.nystrom = c(1:n); y.lkflag = c(1:n)
+y.rbf[train.index] = train_pred.hcp; y.rbf[test.index] = test_pred.hcp
+y.glgp[train.index] = train_pred_glgp.hcp; y.glgp[test.index] = test_pred_glgp.hcp
+y.nystrom[train.index] = train_pred_nystrom.hcp; y.nystrom[test.index] = test_pred_nystrom.hcp
+y.lkflag[train.index] = train_pred_lkflag.hcp; y.lkflag[test.index] = test_pred_lkflag.hcp
+```
+
++ Remove Outliers
+```{r}
+outlier_rbf = order(abs(y.rbf-y),decreasing=TRUE)[1:round(n*a)]
+outlier_glgp = order(abs(y.glgp-y),decreasing=TRUE)[1:round(n*a)]
+outlier_nystrom = order(abs(y.nystrom-y),decreasing=TRUE)[1:round(n*a)]
+outlier_lkflag = order(abs(y.lkflag-y),decreasing=TRUE)[1:round(n*a)]
+outlier = c(outlier_rbf, outlier_glgp, outlier_nystrom, outlier_lkflag)
+idx = c(1:n)[-outlier]
+```
+
+
+## Prediction
+```{r}
+col_range = range(y.rbf[idx],y.glgp[idx],y.nystrom[idx],y.lkflag[idx])
+pdf(file = "plots/hcp/act/prediction_fMRI.pdf")
+mat = matrix(c(1,2,5,3,4,5),2,3,byrow = TRUE)
+layout(mat,widths = c(0.4,0.4,0.1))
+# layout.show(5)
+par(mar=c(1,1,0,0))
+scatter3D(X[idx,1], X[idx,2], X[idx,3],
+          theta = 20, phi = 30, colvar = y.rbf[idx],
+          pch = 20, box=TRUE, cex = 0.2, colkey = FALSE, clim = col_range,
+          border="black", shade=0.8, alpha = 1,
+          bty = "g",
+          main="")
+scatter3D(X[idx,1], X[idx,2], X[idx,3],
+          theta = 20, phi = 30, colvar = y.glgp[idx],
+          pch = 20, box=TRUE, cex = 0.2, colkey = FALSE, clim = col_range,
+          border="black", shade=0.8, 
+          bty = "g",
+          main="")
+scatter3D(X[idx,1], X[idx,2], X[idx,3],
+          theta = 20, phi = 30, colvar = y.nystrom[idx],
+          pch = 20, box=TRUE, cex = 0.2, colkey = FALSE, clim = col_range,
+          border="black", shade=0.8, 
+          bty = "g",
+          main="")
+scatter3D(X[idx,1], X[idx,2], X[idx,3],
+          theta = 20, phi = 30, colvar = y.lkflag[idx],
+          pch = 20, box=TRUE, cex = 0.2, colkey = FALSE, clim = col_range,
+          border="black", shade=0.8, 
+          bty = "g",
+          main="")
+colkey(clim = col_range, length = 0.8, width = 3, side = 2)
+dev.off()
+```
+
+## Difference
+```{r}
+col_max = max(abs(y.rbf-y)[idx], abs(y.glgp-y)[idx], abs(y.nystrom-y)[idx], abs(y.lkflag-y)[idx])
+col_range = c(-col_max,col_max)
+```
+
+```{r}
+pdf(file = "plots/hcp/act/difference_fMRI.pdf")
+mat = matrix(c(1,2,5,3,4,5),2,3,byrow = TRUE)
+layout(mat,widths = c(0.4,0.4,0.1))
+# layout.show(5)
+par(mar=c(1,1,0,0))
+scatter3D(X[idx,1], X[idx,2], X[idx,3],
+          theta = 20, phi = 30, colvar = (y.rbf-y)[idx],
+          pch = 20, box=TRUE, cex = 0.2, colkey = FALSE, clim = col_range,
+          border="black", shade=0.8, alpha = 1,
+          bty = "g",
+          main="")
+
+rect3D(x0=0,y0=0.5,z0=0.6,x1=0.15,y1=NULL,z1=0.9,
+       theta = 20, phi = 30, add = TRUE, facets = NA, lwd=1, border = "black")
+arrows3D(x0=0.35,y0=0.6,z0=0.95,x1=0.2,y1=0.5,z1=0.92,
+       theta = 20, phi = 30, add = TRUE, lwd=1.5, col = "black", type = "curved")
+text3D(0.4,0.6,0.97,labels = "1",add=TRUE,col="black",cex=1.5)
+
+rect3D(x0=0.75,y0=0.4,z0=0.3,x1=0.95,y1=NULL,z1=0.5,
+       theta = 20, phi = 30, add = TRUE, facets = NA, lwd=1, border = "black")
+arrows3D(x0=0.6,y0=0.3,z0=0.2,x1=0.7,y1=0.4,z1=0.25,
+       theta = 20, phi = 30, add = TRUE, lwd=1.5, col = "black", type = "curved")
+text3D(0.49,0.3,0.15,labels = "2",add=TRUE,col="black",cex=1.5)
+
+if(TRUE) {
+scatter3D(X[idx,1], X[idx,2], X[idx,3],
+          theta = 20, phi = 30, colvar = (y.glgp-y)[idx],
+          pch = 20, box=TRUE, cex = 0.2, colkey = FALSE, clim = col_range,
+          border="black", shade=0.8, 
+          bty = "g",
+          main="")
+scatter3D(X[idx,1], X[idx,2], X[idx,3],
+          theta = 20, phi = 30, colvar = (y.nystrom-y)[idx],
+          pch = 20, box=TRUE, cex = 0.2, colkey = FALSE, clim = col_range,
+          border="black", shade=0.8, 
+          bty = "g",
+          main="")
+scatter3D(X[idx,1], X[idx,2], X[idx,3],
+          theta = 20, phi = 30, colvar = (y.lkflag-y)[idx],
+          pch = 20, box=TRUE, cex = 0.2, colkey = FALSE, clim = col_range,
+          border="black", shade=0.8, 
+          bty = "g",
+          main="")
+colkey(clim = col_range, length = 0.8, width = 3, side = 2)
+}
+dev.off()
+```

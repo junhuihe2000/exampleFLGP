@@ -12,7 +12,6 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 library(oro.nifti)
 library(neurobase)
-library(bigmemory)
 library(readxl)
 ```
 
@@ -22,8 +21,10 @@ pathpre = "G:/Phd/Data/HCPFMRI/WM_contrasts/"
 pathsuf = "_2bk-0bk.nii"
 ```
 
++ draw fMRI image
 ```{r}
 tmp = readnii(paste0(pathpre, "templates/ch2.nii"))
+tmp_img = readnii(paste0(pathpre, "templates/100206", pathsuf))
 ```
 
 ```{r}
@@ -31,15 +32,11 @@ ortho2(tmp)
 ```
 
 ```{r}
-tmp_img = readnii(paste0(pathpre, "templates/100206", pathsuf))
-img = readnii(paste0(pathpre, "Contrasts/100206", pathsuf))
-img = img[!is.na(img)]
+ortho2(tmp,y=abs(tmp_img)>qnorm(0.95))
 ```
 
-
-
 ```{r}
-ortho2(tmp,y=abs(tmp_img)>quantile(abs(img),0.95))
+ortho2(tmp,y=(abs(tmp_img)>quantile(abs(tmp_img[!is.na(tmp_img)]),0.975)))
 ```
 
 
@@ -55,7 +52,7 @@ subjects = phenotypics$Subject
 n = length(subjects)
 idx = c()
 for(i in c(1:n)) {
-  filepath = paste0(pathpre, subjects[i], pathsuf)
+  filepath = paste0(pathpre, "Contrasts/", subjects[i], pathsuf)
   if(file.exists(filepath)) {
     idx = c(idx,i)
   }
@@ -65,11 +62,10 @@ for(i in c(1:n)) {
 ```{r}
 idx.sub = cbind(idx, subjects[idx])
 colnames(idx.sub) = c("index", "subject")
-write.csv(idx.sub, "G:/Phd/Data/HCPFMRI/index2bk-0bk.csv", row.names = FALSE)
+# write.csv(idx.sub, "G:/Phd/Data/HCPFMRI/index2bk-0bk.csv", row.names = FALSE)
 ```
 
 ```{r}
-subjects_used = subjects[idx]
 n_used = length(idx)
 print(n_used)
 ```
@@ -80,14 +76,16 @@ print(n_used)
 ```{r}
 index.subject = read.csv("G:/Phd/Data/HCPFMRI/index2bk-0bk.csv")
 aal = readnii("G:/Phd/Data/HCPFMRI/AAL_MNI_2mm.nii")
+aal_region = read_excel("G:/Phd/Data/HCPFMRI/AALregion_full.xls")
 ```
 
-```{r}
-nsub = 10
++ extract frontal lobe region data
+```{r, include=FALSE}
+nsub = dim(index.subject)[1]
 
 for(m in c(1:nsub)) {
   subject = index.subject$subject[m]
-  img = readnii(paste0(pathpre, subject, pathsuf))
+  img = readnii(paste0(pathpre, "Contrasts/", subject, pathsuf))
   dims = dim(img)
   domains = !is.na(img)
   n = sum(domains)
@@ -99,19 +97,58 @@ for(m in c(1:nsub)) {
     for(j in 1:dims[2]) {
       for(k in 1:dims[3]) {
         if(domains[i,j,k]) {
-          data[idx,] = c(i,j,k,img[i,j,k], aal[i,j,k])
+          data[idx,] = c(i,j,k,img[i,j,k],aal[i,j,k])
           idx = idx + 1
         }
       }
     }
   }
   
-  # coordinate transform
-  for(i in 1:3) {
-    data[,i] = (data[,i]-min(data[,i]))/(max(data[,i])-min(data[,i]))
-  }
+  frontal_data = data[is.element(data[,5],aal_region$Code[3:16]),]
   
-  write.csv(data, paste0("G:/Phd/Data/HCPFMRI/2bk-0bk/",subject,"_2bk-0bk.csv"), row.names = FALSE)
+  # coordinate transform
+  # for(i in 1:3) {
+  #   data[,i] = (data[,i]-min(data[,i]))/(max(data[,i])-min(data[,i]))
+  # }
+  
+  write.csv(frontal_data, paste0("G:/Phd/Data/HCPFMRI/2bk-0bk/frontal/",subject,"_2bk-0bk_frontal.csv"), row.names = FALSE)
 }
+```
+
++ Activated Location
+
+```{r}
+act_count = nifti(img=array(0,dim=dim(aal)),datatype=4) # record the activated locations
+p = 0.95
+```
+
+```{r, include=FALSE}
+nsub = dim(index.subject)[1]
+
+for(m in c(1:nsub)) {
+  subject = index.subject$subject[m]
+  img = readnii(paste0(pathpre, "Contrasts/", subject, pathsuf))
+  img[is.na(img)] = 0
+  act_count = act_count + (abs(img)>qnorm((1+p)/2))
+}
+```
+
+```{r}
+writenii(act_count, paste0("G:/Phd/Data/HCPFMRI/2bk-0bk/activated_",100*p))
+```
+
+
+```{r}
+act_count = readnii(paste0("G:/Phd/Data/HCPFMRI/2bk-0bk/activated_90.nii"))
+```
+
+```{r}
+act_idx = (act_count >= 3)
+act_idx_frontal = (act_idx & array(is.element(aal, aal_region$Code[3:16]), dim=dim(aal)))
+```
+
+```{r}
+mean(abs(img[!is.na(img)]))
+mean(abs(img[!is.na(img)&act_idx]))
 ```
 

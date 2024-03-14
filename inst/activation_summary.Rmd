@@ -1,0 +1,86 @@
+---
+title: "Frontal Activation Summary"
+author: "He Junhui"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(stringr)
+```
+
+
+```{r}
+index.subject = read.csv("G:/Phd/Data/HCPFMRI/index2bk-0bk.csv")
+```
+
+```{r}
+filepath = "tables/hcp/act/"
+nsub = 10
+```
+
+```{r}
+options(scipen=999)
+```
+
+
++ process Frontal Lobes data
+
+```{r}
+mse_train.act = matrix(0,4,4); mse_test.act = matrix(0,4,4)
+sd_train.act = matrix(0,4,4); sd_test.act = matrix(0,4,4)
+time.act = matrix(0,4,4)
+
+for(idx in c(1:nsub)) {
+  subject = index.subject$subject[idx]
+  data.act = read.csv(paste0(filepath,subject,".csv"))
+  for(i in c(1:4)) {
+    for(j in c(1:4)) {
+      train.reg = str_extract_all(data.act[j,(3*i-1)], "[^()]+")[[1]]
+      mse_train.act[j,i] = mse_train.act[j,i] + as.double(train.reg[1])
+      sd_train.act[j,i] = sd_train.act[j,i] + as.double(train.reg[2])
+      test.reg = str_extract_all(data.act[j,(3*i)], "[^()]+")[[1]]
+      mse_test.act[j,i] = mse_test.act[j,i] + as.double(test.reg[1])
+      sd_test.act[j,i] = sd_test.act[j,i] + as.double(test.reg[2])
+    }
+    time.act[,i] = time.act[,i] + data.act[,(3*i+1)]
+  }
+}
+
+mydigits = 3
+mse_train.act = round(mse_train.act/nsub,digits = mydigits)
+mse_test.act = round(mse_test.act/nsub,digits=mydigits)
+sd_train.act = round(sd_train.act/nsub,digits=mydigits)
+sd_test.act = round(sd_test.act/nsub,digits=mydigits)
+time.act = round(time.act/nsub,digits=mydigits)
+```
+
+```{r}
+summary.act = as.data.frame(matrix(0,4,20))
+rownames(summary.act) = data.act[,1]
+colnames(summary.act) = rep(c("train mse", "train sd", "test mse", "test sd", "time"), 4)
+for(i in c(1:4)) {
+  summary.act[,((5*i-4):(5*i))] = cbind(mse_train.act[,i],sd_train.act[,i],
+                                            mse_test.act[,i],sd_test.act[,i],
+                                            time.act[,i])
+}
+write.csv(summary.act, paste0(filepath,"summary_act.csv"))
+```
+
+```{r}
+summarycom.act = as.data.frame(matrix(0,4,12))
+rownames(summarycom.act) = data.act[,1]
+colnames(summarycom.act) = rep(c("train mse", "test mse", "time"), 4)
+for(i in c(1:4)) {
+  summarycom.act[,(3*i)] = time.act[,i]
+  for(j in c(1:4)) {
+    summarycom.act[j,(3*i-2)] = paste0(mse_train.act[j,i],"(",sd_train.act[j,i],")")
+    summarycom.act[j,(3*i-1)] = paste0(mse_test.act[j,i],"(",sd_test.act[j,i],")")
+  }
+}
+write.csv(summarycom.act, paste0(filepath,"summarycom_act.csv"))
+```
