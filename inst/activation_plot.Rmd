@@ -45,26 +45,26 @@ y = data_act[,4]
 
 + Truth
 ```{r}
-pdf(file = "plots/hcp/act/truth_fMRI.pdf")
+pdf(file = "plots/hcp/act/better_truth_fMRI.pdf")
 mat = matrix(c(1,2,3,4),1,4,byrow = TRUE)
 layout(mat, widths = c(0.3,0.3,0.3,0.1))
 # layout.show(4)
 par(mar=c(0,1,0,2))
 scatter3D(X[,1], X[,2], X[,3],
           theta = 20, phi = 30, colvar = y,
-          pch = 20, box=TRUE, cex = 0.2, colkey = FALSE, 
+          pch = 20, box=TRUE, cex = 0.13, colkey = FALSE, 
           border="black", shade=0.8, alpha = 1,
           bty = "g",
           main="")
 scatter3D(X[,1], X[,2], X[,3],
           theta = 50, phi = 40, colvar = y,
-          pch = 20, box=TRUE, cex = 0.2, colkey = FALSE, 
+          pch = 20, box=TRUE, cex = 0.13, colkey = FALSE, 
           border="black", shade=0.8, alpha = 1,
           bty = "g",
           main="")
 scatter3D(X[,1], X[,2], X[,3],
           theta = -30, phi = 30, colvar = y,
-          pch = 20, box=TRUE, cex = 0.2, colkey = FALSE, 
+          pch = 20, box=TRUE, cex = 0.13, colkey = FALSE, 
           border="black", shade=0.8, alpha = 1,
           bty = "g",
           main="")
