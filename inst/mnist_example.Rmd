@@ -10,10 +10,12 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r}
+library(devtools)
 library(kernlab)
 library(FLGP)
 library(microbenchmark)
 library(bigmemory)
+load_all()
 ```
 
 ```{r}
@@ -51,7 +53,7 @@ y.mnist = read.big.matrix(paste0(inputpath, "labels.csv"), has.row.names = TRUE,
 # divide training samples and testing samples
 
 # n = dim(xbmpca.mnist)[1] # 70000
-n = 70000
+n = 7000
 d = dim(xbmpca.mnist)[2] # 100
 m = 100
 
@@ -68,15 +70,26 @@ y_new.mnist = y.mnist[test.index.mnist]
 + Classification
 
 ```{r}
-# radial basis kernel function
-rbf.mnist = gausspr(x=train.data.mnist, y=as.factor(y_train.mnist),
-                      type="classification", scaled = FALSE)
-pred_prob.mnist = predict(rbf.mnist, test.data.mnist, type="probabilities")
-pred_label.mnist = apply(pred_prob.mnist, 1, function(x) {return(which.max(x)-1)})
-err.rbf.mnist = sum((y_new.mnist!=pred_label.mnist)^2)/(n-m)
-err.rbf.mnist
-# 0.5721316
+# squared exponential kernel
+t1 = Sys.time()
+rbf.model = train_multi_classification(train.data.mnist, y_train.mnist)
+res_rbf = predict_multi_classification(test.data.mnist, rbf.model)
+t2 = Sys.time()
+t2 - t1
+pred_rbf = res_rbf$pred
+err.rbf = mean(y_new.mnist!=pred_rbf)
+err.rbf
+# 0.3424638
 ```
+
+```{r}
+mean = res_rbf$posterior$mean
+cov = res_rbf$posterior$cov
+nll_rbf = negative_log_likelihood(mean, cov, y_new.mnist, "multinomial")
+nll_rbf
+# 2.88924
+```
+
 
 ```{r}
 # ksvm
@@ -85,14 +98,14 @@ ksvm.mnist = ksvm(x=train.data.mnist, y=as.factor(y_train.mnist),
 pred_label.ksvm.mnist = predict(ksvm.mnist, test.data.mnist)
 err.ksvm.mnist = sum((y_new.mnist!=pred_label.ksvm.mnist)^2)/(n-m)
 err.ksvm.mnist
-# 0.4072675
+# 0.2957971
 ```
 
 + FLGP
 
 ```{r}
 # hyper parameters
-s = 2000; r = 3; K = 200
+s = 1000; r = 3; K = 50
 models = list(subsample="kmeans", kernel="lae", gl="cluster-normalized", root=TRUE)
 ```
 
@@ -105,17 +118,27 @@ models$subsample = "kmeans"; models$gl = "cluster-normalized"
 
 ```{r}
 t1 = Sys.time()
-y_lkflag.mnist = fit_lae_logit_mult_gp_rcpp(train.data.mnist, y_train.mnist, test.data.mnist, s, r, K, models = models)
+res_lkflag.mnist = fit_lae_logit_mult_gp_rcpp(train.data.mnist, y_train.mnist, test.data.mnist, s, r, K, models = models)
 t2 = Sys.time()
 t2 - t1
 # Time difference of 20.44336 secs
 ```
 
 ```{r}
+y_lkflag.mnist = res_lkflag.mnist$Y_pred
 err_lkflag.mnist = sum((y_new.mnist!=y_lkflag.mnist$test)^2)/(n-m)
 err_lkflag.mnist
-# 0.09150215
+# 0.1663768
 ```
+
+```{r}
+mean = res_lkflag.mnist$posterior$mean
+cov = res_lkflag.mnist$posterior$cov
+nll_lk = negative_log_likelihood(mean, cov, y_new.mnist, "multinomial")
+nll_lk
+# 1.930565
+```
+
 
 + LRFLGP
 ```{r}
@@ -126,16 +149,25 @@ models$subsample = "random"; models$gl = "normalized"
 
 ```{r}
 t1 = Sys.time()
-y_lrflag.mnist = fit_lae_logit_mult_gp_rcpp(train.data.mnist, y_train.mnist, test.data.mnist, s, r, K, models = models)
+res_lrflag.mnist = fit_lae_logit_mult_gp_rcpp(train.data.mnist, y_train.mnist, test.data.mnist, s, r, K, models = models)
 t2 = Sys.time()
 t2 - t1
 # Time difference of 5.835267 secs
 ```
 
 ```{r}
+y_lrflag.mnist = res_lrflag.mnist$Y_pred
 err_lrflag.mnist = sum((y_new.mnist!=y_lrflag.mnist$test)^2)/(n-m)
 err_lrflag.mnist
 # 0.2334478
+```
+
+```{r}
+mean = res_lrflag.mnist$posterior$mean
+cov = res_lrflag.mnist$posterior$cov
+nll_lr = negative_log_likelihood(mean, cov, y_new.mnist, "multinomial")
+nll_lr
+# 2.105812
 ```
 
 + SKFLGP
@@ -146,16 +178,25 @@ models$subsample = "kmeans"; models$gl = "cluster-normalized"
 
 ```{r}
 t1 = Sys.time()
-y_skflag.mnist = fit_se_logit_mult_gp_rcpp(train.data.mnist, y_train.mnist, test.data.mnist, s, r, K, models = models)
+res_skflag.mnist = fit_se_logit_mult_gp_rcpp(train.data.mnist, y_train.mnist, test.data.mnist, s, r, K, models = models)
 t2 = Sys.time()
 t2 - t1
 # Time difference of 30.50837 secs
 ```
 
 ```{r}
+y_skflag.mnist = res_skflag.mnist$Y_pred
 err_skflag.mnist = sum((y_new.mnist!=y_skflag.mnist$test)^2)/(n-m)
 err_skflag.mnist
-# 0.09586552
+# 0.1569565
+```
+
+```{r}
+mean = res_skflag.mnist$posterior$mean
+cov = res_skflag.mnist$posterior$cov
+nll_sk = negative_log_likelihood(mean, cov, y_new.mnist, "multinomial")
+nll_sk
+# 1.917983
 ```
 
 + SRFLGP
@@ -166,47 +207,101 @@ models$subsample = "random"; models$gl = "normalized"
 
 ```{r}
 t1 = Sys.time()
-y_srflag.mnist = fit_se_logit_mult_gp_rcpp(train.data.mnist, y_train.mnist, test.data.mnist, s, r, K, models = models)
+res_srflag.mnist = fit_se_logit_mult_gp_rcpp(train.data.mnist, y_train.mnist, test.data.mnist, s, r, K, models = models)
 t2 = Sys.time()
 t2 - t1
 # Time difference of 14.88994 secs
 ```
 
 ```{r}
+y_srflag.mnist = res_srflag.mnist$Y_pred
 err_srflag.mnist = sum((y_new.mnist!=y_srflag.mnist$test)^2)/(n-m)
 err_srflag.mnist
 # 0.1885265
+```
+
+```{r}
+mean = res_srflag.mnist$posterior$mean
+cov = res_srflag.mnist$posterior$cov
+nll_sr = negative_log_likelihood(mean, cov, y_new.mnist, "multinomial")
+nll_sr
+# 2.013103
 ```
 
 + Nystrom extension
 ```{r}
 # Nystrom extension
 t1 = Sys.time()
-y_nystrom.mnist = fit_nystrom_logit_mult_gp_rcpp(train.data.mnist, y_train.mnist, test.data.mnist, s, K, models = models)
+bwd = exp(seq(log(0.1),log(10),length.out=10))
+res_nystrom.mnist = fit_nystrom_logit_mult_gp_rcpp(train.data.mnist, y_train.mnist, test.data.mnist, s, K, a2s = bwd)
 t2 = Sys.time()
 t2 - t1
 # Time difference of 2.402349 mins
 ```
 
 ```{r}
+y_nystrom.mnist = res_nystrom.mnist$Y_pred
 err_nystrom.mnist = sum((y_new.mnist!=y_nystrom.mnist$test)^2)/(n-m)
 err_nystrom.mnist
-# 0.384392
+# 0.3088406
+```
+
+```{r}
+mean = res_nystrom.mnist$posterior$mean
+cov = res_nystrom.mnist$posterior$cov
+nll_nystrom = negative_log_likelihood(mean, cov, y_new.mnist, "multinomial")
+nll_nystrom
+# 2.43722
 ```
 
 + GLGP
 ```{r}
-# sparseGLGP
+# GLGP
 t1 = Sys.time()
-y_glsp.mnist = fit_gl_logit_mult_gp_rcpp(train.data.mnist, y_train.mnist, test.data.mnist, K,
-                                         sparse = FALSE, models = models)
+bwd = exp(seq(log(0.1),log(10),length.out=10))
+res_gl.mnist = fit_gl_logit_mult_gp_rcpp(train.data.mnist, y_train.mnist, test.data.mnist, K,
+                                         sparse = FALSE, a2s = bwd)
 t2 = Sys.time()
 t2 - t1
 # Time difference of 7.454023 mins
 ```
 
 ```{r}
+y_gl.mnist = res_gl.mnist$Y_pred
+err_gl.mnist = sum((y_new.mnist!=y_gl.mnist$test)^2)/(n-m)
+err_gl.mnist
+# 0.3382609
+```
+
+```{r}
+mean = res_gl.mnist$posterior$mean
+cov = res_gl.mnist$posterior$cov
+nll_gl = negative_log_likelihood(mean, cov, y_new.mnist, "multinomial")
+nll_gl
+# 2.482875
+```
+
++ SparseGLGP
+```{r}
+# SparseGLGP
+t1 = Sys.time()
+bwd = exp(seq(log(0.3),log(10),length.out=10))
+res_glsp.mnist = fit_gl_logit_mult_gp_rcpp(train.data.mnist, y_train.mnist, test.data.mnist, K, threshold = 0.01, sparse = TRUE, a2s = bwd)
+t2 = Sys.time()
+t2 - t1
+# Time difference of 7.454023 mins
+```
+
+```{r}
+y_glsp.mnist = res_glsp.mnist$Y_pred
 err_glsp.mnist = sum((y_new.mnist!=y_glsp.mnist$test)^2)/(n-m)
 err_glsp.mnist
 # 0.1605866
+```
+
+```{r}
+mean = res_glsp.mnist$posterior$mean
+cov = res_glsp.mnist$posterior$cov
+nll_glsp = negative_log_likelihood(mean, cov, y_new.mnist, "multinomial")
+nll_glsp
 ```

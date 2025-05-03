@@ -30,7 +30,7 @@ set.seed(1234)
 
 ```{r}
 # generate samples of torus
-n = 12000; n_each = 2000; d = 3
+n = 9000; n_each = 1500; d = 3
 thetas = runif(n, 0, 2*pi)
 X = matrix(0, nrow=n, ncol=2); Y = matrix(0, nrow=n, ncol=1)
 X[,1] = cos(thetas); X[,2] = sin(thetas)
@@ -46,28 +46,25 @@ torus.df = data.frame(X,Y)
 ## Experiment
 ```{r}
 num_exps = 20 # experiment numbers
-ms = c(50,100) # number of labeled samples
-res_list = lapply(c(1:(length(ms)*2)), function(i) {return(matrix(0,nrow=9,ncol=num_exps))})
+m = 50 # number of labeled samples
+errors = array(NA, c(8, num_exps))
+times = array(NA, c(8, num_exps))
+nlls = array(NA, c(8, num_exps))
 ```
 
 ```{r}
 # hyper parameters
-s = 600; r = 3; K = 100
-models = list(subsample="kmeans", kernel="lae", gl="cluster-normalized", root=TRUE)
+s = 600; K = 100
 ```
 
 
 ```{r, include=FALSE}
 time_start = Sys.time()
 
-for(i in c(1:length(ms))) {
-
 for(num_exp in c(1:num_exps)) {
   
   
-  
 # classification
-m = ms[i]
 train.index = sample.int(n, m); test.index = c(1:n)[-train.index]
 train.data = torus.df[train.index,]; test.data = torus.df[-train.index,]
 colnames(test.data)[3] = "Class"
@@ -78,21 +75,24 @@ rbf.torus = gausspr(x=train.data[,1:2], y=train.data[,3], type="classification")
 pred_prob.torus = predict(rbf.torus, test.data[,1:2], type="probabilities")
 pred_label.torus = as.factor(apply(pred_prob.torus, 1, function(x) {return(which.max(x)-1)}))
 t2 = Sys.time()
-err.rbf.torus = sum((as.double(test.data[,3])!=as.double(pred_label.torus))^2)/(n-m)
+err.rbf.torus = mean(as.double(test.data[,3])!=as.double(pred_label.torus))
+print(err.rbf.torus)
 
-res_list[[2*i-1]][1,num_exp] = err.rbf.torus
-res_list[[2*i]][1,num_exp] = as.numeric(t2-t1, units="hours")*3600
+kernel = rbf.torus@kernelf
+scale = rbf.torus@scaling$x.scale
+train.data.scale = scale(train.data[,1:2], scale$`scaled:center`, scale$`scaled:scale`)
+test.data.scale = scale(test.data[,1:2], scale$`scaled:center`, scale$`scaled:scale`)
+C11 = kernelMatrix(kernel, train.data.scale)
+C21 = kernelMatrix(kernel, test.data.scale, train.data.scale)
+C22 = rep(1,n-m)
+post = posterior_distribution_classification(C11,C21,cbind(C22),(as.numeric(train.data[,3])-1))
+mean = cbind(post$mean)
+cov = cbind(post$cov)
+nll_rbf.torus = negative_log_likelihood(mean, cov, (as.numeric(test.data[,3])-1), "binary")
 
-# ksvm
-t1 = Sys.time()
-ksvm.torus = ksvm(x=as.matrix(train.data[,1:(d-1)]), y=as.factor(train.data[,d]), 
-            type="C-svc")
-pred_label.ksvm.torus = predict(ksvm.torus, as.matrix(test.data[,1:(d-1)]))
-t2 = Sys.time()
-err.ksvm.torus = sum((test.data[,d]!=pred_label.ksvm.torus)^2)/(n-m)
-
-res_list[[2*i-1]][2,num_exp] = err.ksvm.torus
-res_list[[2*i]][2,num_exp] = as.numeric(t2-t1, units="hours")*3600
+errors[1,num_exp] = err.rbf.torus
+times[1,num_exp] = as.numeric(t2-t1, units="hours")*3600
+nlls[1,num_exp] = nll_rbf.torus
 
 
 # Representative GLGP
@@ -105,86 +105,139 @@ f.torus = as.numeric(train.data[,d])-1
 f_test.torus = as.numeric(test.data[,d])-1
 
 
+if(FALSE) {
 # GLGP
 t1 = Sys.time()
-res_gl.torus = fit_gl_logit_gp_rcpp(X.scale.torus[1:m,], f.torus, X.scale.torus[(m+1):n,], K, sparse = FALSE, models = models, output_cov = FALSE)
+bwd = exp(seq(log(0.001),log(1),length.out=20))
+res_gl.torus = fit_gl_logit_gp_rcpp(X.scale.torus[1:m,], f.torus, X.scale.torus[(m+1):n,], K, sparse = FALSE, a2s = bwd)
 y_pred_gl.torus = res_gl.torus$Y_pred
 t2 = Sys.time()
-err_gl.torus = sum((f_test.torus!=y_pred_gl.torus$test)^2)/(n-m)
+err_gl.torus = mean(f_test.torus!=y_pred_gl.torus$test)
+print(err_gl.torus)
 
-res_list[[2*i-1]][3,num_exp] = err_gl.torus
-res_list[[2*i]][3,num_exp] = as.numeric(t2-t1, units="hours")*3600
+mean = cbind(res_gl.torus$posterior$mean)
+cov = cbind(res_gl.torus$posterior$cov)
+nll_gl.torus = negative_log_likelihood(mean, cov, f_test.torus, "binary")
 
-
-# sparseGLGP
-t1 = Sys.time()
-res_glsp.torus = fit_gl_logit_gp_rcpp(X.scale.torus[1:m,], f.torus, X.scale.torus[(m+1):n,], K, threshold = 0.01, sparse = TRUE, models = models, output_cov = FALSE)
-y_pred_glsp.torus = res_glsp.torus$Y_pred
-t2 = Sys.time()
-err_glsp.torus = sum((f_test.torus!=y_pred_glsp.torus$test)^2)/(n-m)
-
-res_list[[2*i-1]][4,num_exp] = err_glsp.torus
-res_list[[2*i]][4,num_exp] = as.numeric(t2-t1, units="hours")*3600
-
+errors[2,num_exp] = err_gl.torus
+times[2,num_exp] = as.numeric(t2-t1, units="hours")*3600
+nlls[2,num_exp] = nll_gl.torus
 
 # Nystrom extension
 t1 = Sys.time()
-res_nystrom.torus = fit_nystrom_logit_gp_rcpp(X.scale.torus[1:m,], f.torus, X.scale.torus[(m+1):n,], s, K, models = models, output_cov = FALSE)
+bwd = exp(seq(log(0.001),log(1),length.out=20))
+res_nystrom.torus = fit_nystrom_logit_gp_rcpp(X.scale.torus[1:m,], f.torus, X.scale.torus[(m+1):n,], s, K, a2s = bwd)
 y_pred_nystrom.torus = res_nystrom.torus$Y_pred
 t2 = Sys.time()
-err_nystrom.torus = sum((f_test.torus!=y_pred_nystrom.torus$test)^2)/(n-m)
+err_nystrom.torus = mean(f_test.torus!=y_pred_nystrom.torus$test)
+print(err_nystrom.torus)
 
-res_list[[2*i-1]][5,num_exp] = err_nystrom.torus
-res_list[[2*i]][5,num_exp] = as.numeric(t2-t1, units="hours")*3600
+mean = cbind(res_nystrom.torus$posterior$mean)
+cov = cbind(res_nystrom.torus$posterior$cov)
+nll_nystrom.torus = negative_log_likelihood(mean, cov, f_test.torus, "binary")
+
+errors[3,num_exp] = err_nystrom.torus
+times[3,num_exp] = as.numeric(t2-t1, units="hours")*3600
+nlls[3,num_exp] = nll_nystrom.torus
+}
+
+# FLGP without subsampling
+if (n == 3000) {r = 20} else {r = 60}
+models = list(subsample="random", gl="normalized", root=TRUE)
+t1 = Sys.time()
+bwd = exp(seq(log(0.1),log(10),length.out=20))
+res_flag.torus = fit_se_logit_gp_rcpp(X.scale.torus[1:m,], f.torus, X.scale.torus[(m+1):n,], n, r, K, models = models, a2s = bwd)
+y_pred_flag.torus = res_flag.torus$Y_pred
+t2 = Sys.time()
+err_flag.torus = mean(f_test.torus!=y_pred_flag.torus$test)
+print(err_flag.torus)
+
+mean = cbind(res_flag.torus$posterior$mean)
+cov = cbind(res_flag.torus$posterior$cov)
+nll_flag.torus = negative_log_likelihood(mean, cov, f_test.torus, "binary")
+
+errors[4,num_exp] = err_flag.torus
+times[4,num_exp] = as.numeric(t2-t1, units="hours")*3600
+nlls[4,num_exp] = nll_flag.torus
+
+
+if (FALSE) {
+r = 3
 
 # SRFLGP
-models$subsample = "random"; models$gl = "normalized"
+models = list(subsample="random", gl="normalized", root=TRUE)
 t1 = Sys.time()
-res_srflag.torus = fit_se_logit_gp_rcpp(X.scale.torus[1:m,], f.torus, X.scale.torus[(m+1):n,], s, r, K, models = models, output_cov = FALSE)
+bwd = exp(seq(log(0.1),log(10),length.out=20))
+res_srflag.torus = fit_se_logit_gp_rcpp(X.scale.torus[1:m,], f.torus, X.scale.torus[(m+1):n,], s, r, K, models = models, a2s = bwd)
 y_pred_srflag.torus = res_srflag.torus$Y_pred
 t2 = Sys.time()
-err_srflag.torus = sum((f_test.torus!=y_pred_srflag.torus$test)^2)/(n-m)
+err_srflag.torus = mean(f_test.torus!=y_pred_srflag.torus$test)
+print(err_srflag.torus)
 
-res_list[[2*i-1]][6,num_exp] = err_srflag.torus
-res_list[[2*i]][6,num_exp] = as.numeric(t2-t1, units="hours")*3600
+mean = cbind(res_srflag.torus$posterior$mean)
+cov = cbind(res_srflag.torus$posterior$cov)
+nll_srflag.torus = negative_log_likelihood(mean, cov, f_test.torus, "binary")
+
+errors[5,num_exp] = err_srflag.torus
+times[5,num_exp] = as.numeric(t2-t1, units="hours")*3600
+nlls[5,num_exp] = nll_srflag.torus
 
 # SKFLGP
-models$subsample = "kmeans"; models$gl = "cluster-normalized"
+models = list(subsample="kmeans", gl="cluster-normalized", root=TRUE)
 t1 = Sys.time()
-res_skflag.torus = fit_se_logit_gp_rcpp(X.scale.torus[1:m,], f.torus, X.scale.torus[(m+1):n,], s, r, K, models = models, output_cov = FALSE)
+bwd = exp(seq(log(0.1),log(10),length.out=20))
+res_skflag.torus = fit_se_logit_gp_rcpp(X.scale.torus[1:m,], f.torus, X.scale.torus[(m+1):n,], s, r, K, models = models, a2s = bwd)
 y_pred_skflag.torus = res_skflag.torus$Y_pred
 t2 = Sys.time()
-err_skflag.torus = sum((f_test.torus!=y_pred_skflag.torus$test)^2)/(n-m)
+err_skflag.torus = mean(f_test.torus!=y_pred_skflag.torus$test)
+print(err_skflag.torus)
 
-res_list[[2*i-1]][7,num_exp] = err_skflag.torus
-res_list[[2*i]][7,num_exp] = as.numeric(t2-t1, units="hours")*3600
+mean = cbind(res_skflag.torus$posterior$mean)
+cov = cbind(res_skflag.torus$posterior$cov)
+nll_skflag.torus = negative_log_likelihood(mean, cov, f_test.torus, "binary")
+
+errors[6,num_exp] = err_skflag.torus
+times[6,num_exp] = as.numeric(t2-t1, units="hours")*3600
+nlls[6,num_exp] = nll_skflag.torus
 
 
 # LRFLGP
-models$subsample = "random"; models$gl = "normalized"
+models = list(subsample="random", gl="normalized", root=TRUE)
 t1 = Sys.time()
-res_lrflag.torus = fit_lae_logit_gp_rcpp(X.scale.torus[1:m,], f.torus, X.scale.torus[(m+1):n,], s, r, K, models = models, output_cov = FALSE)
+res_lrflag.torus = fit_lae_logit_gp_rcpp(X.scale.torus[1:m,], f.torus, X.scale.torus[(m+1):n,], s, r, K, models = models)
 y_pred_lrflag.torus = res_lrflag.torus$Y_pred
 t2 = Sys.time()
-err_lrflag.torus = sum((f_test.torus!=y_pred_lrflag.torus$test)^2)/(n-m)
+err_lrflag.torus = mean(f_test.torus!=y_pred_lrflag.torus$test)
+print(err_lrflag.torus)
 
-res_list[[2*i-1]][8,num_exp] = err_lrflag.torus
-res_list[[2*i]][8,num_exp] = as.numeric(t2-t1, units="hours")*3600
+mean = cbind(res_lrflag.torus$posterior$mean)
+cov = cbind(res_lrflag.torus$posterior$cov)
+nll_lrflag.torus = negative_log_likelihood(mean, cov, f_test.torus, "binary")
+
+errors[7,num_exp] = err_lrflag.torus
+times[7,num_exp] = as.numeric(t2-t1, units="hours")*3600
+nlls[7,num_exp] = nll_lrflag.torus
+
 
 
 # LKFLGP
-models$subsample = "kmeans"; models$gl = "cluster-normalized"
+models = list(subsample="kmeans", gl="cluster-normalized", root=TRUE)
 t1 = Sys.time()
-res_lkflag.torus = fit_lae_logit_gp_rcpp(X.scale.torus[1:m,], f.torus, X.scale.torus[(m+1):n,], s, r, K, models = models, output_cov = FALSE)
+res_lkflag.torus = fit_lae_logit_gp_rcpp(X.scale.torus[1:m,], f.torus, X.scale.torus[(m+1):n,], s, r, K, models = models)
 y_pred_lkflag.torus = res_lkflag.torus$Y_pred
 t2 = Sys.time()
-err_lkflag.torus = sum((f_test.torus!=y_pred_lkflag.torus$test)^2)/(n-m)
+err_lkflag.torus = mean(f_test.torus!=y_pred_lkflag.torus$test)
+print(err_lkflag.torus)
 
-res_list[[2*i-1]][9,num_exp] = err_lkflag.torus
-res_list[[2*i]][9,num_exp] = as.numeric(t2-t1, units="hours")*3600
+mean = cbind(res_lkflag.torus$posterior$mean)
+cov = cbind(res_lkflag.torus$posterior$cov)
+nll_lkflag.torus = negative_log_likelihood(mean, cov, f_test.torus, "binary")
 
+errors[8,num_exp] = err_lkflag.torus
+times[8,num_exp] = as.numeric(t2-t1, units="hours")*3600
+nlls[8,num_exp] = nll_lkflag.torus
 }
-  
+
 }
 
 time_end = Sys.time()
@@ -193,37 +246,39 @@ time_diff = time_end - time_start
 
 ```{r}
 print(time_diff)
-# Time difference of 9.501027 mins
-# Time difference of 14.98992 mins
-# Time difference of 58.79785 mins
+# Time difference of 1.518682 hours
+```
+
+```{r}
+save(list = c("errors", "nlls", "times"), file = paste0("data/circle_data_",n,".Rdata"))
 ```
 
 
 ## manipulate results
 ```{r}
 cat("The number of total samples is n = ",n,":\n", sep = "")
-res_table = as.data.frame(matrix(0,nrow=9,ncol=4))
-colnames(res_table) = c("error rates", "time", "error rates", "time")
-rownames(res_table) = c("RBF GP", "RBF KSVM", "GLGP", "sparseGLGP", "Nystrom extension", 
+errors_sum = rep(NA, 8)
+times_sum = round(rowMeans(times), digits = 2)
+nlls_sum = rep(NA, 8)
+
+errors_mean = round(rowMeans(errors)*100, digits = 1)
+errors_sd = round(apply(errors*100, 1, sd), digits = 1)
+for(i in 1:8) {
+  errors_sum[i] = paste0(errors_mean[i],"(",errors_sd[i],")")
+}
+
+nlls_mean = round(rowMeans(nlls), digits = 2)
+nlls_sd = round(apply(nlls, 1, sd), digits = 2)
+for(i in 1:8) {
+  nlls_sum[i] = paste0(nlls_mean[i],"(",nlls_sd[i],")")
+}
+
+results_table = data.frame(error = errors_sum, NLL = nlls_sum, time = times_sum)
+rownames(results_table) = c("EGP", "GLGP", "Nystrom extension", "FLGP wo subsampling",
                         "SRFLGP", "SKFLGP", "LRFLGP", "LKFLGP")
-
-res_table[,2] = round(rowMeans(res_list[[2]]), digits = 2)
-res_table[,4] = round(rowMeans(res_list[[4]]), digits = 2)
-error_mean1 = round(rowMeans(res_list[[1]])*100, digits = 1)
-error_std1 = round(apply(res_list[[1]]*100, 1, sd), digits = 1)
-for(i in c(1:9)) {
-  res_table[i,1] = paste0(error_mean1[i],"(",error_std1[i],")")
-}
-
-error_mean2 = round(rowMeans(res_list[[3]])*100, digits = 1)
-error_std2 = round(apply(res_list[[3]]*100, 1, sd), digits = 1)
-for(i in c(1:9)) {
-  res_table[i,3] = paste0(error_mean2[i],"(",error_std2[i],")")
-}
 ```
 
 ```{r}
-write.csv(res_table, paste0("tables/circles/",n,".csv"))
-print(res_table)
+write.csv(results_table, paste0("tables/circles_revision/results_",n,".csv"))
+print(results_table)
 ```
-

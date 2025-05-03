@@ -19,7 +19,7 @@ library(kernlab)
 
 ## read data
 ```{r}
-subject = "100307"
+subject = "100206"
 data = read.csv(paste0("G:/Phd/Data/HCPFMRI/2bk-0bk/frontal/",subject,"_2bk-0bk_frontal.csv"))
 act_count = readnii(paste0("G:/Phd/Data/HCPFMRI/2bk-0bk/activated_90.nii"))
 ```
@@ -49,7 +49,7 @@ set.seed(1234)
 ```{r}
 n = nrow(X)
 num_exps = 1 # experiment numbers
-ms = c(500,1000,2000,3000) # number of labeled samples
+ms = c(500) # number of labeled samples
 a = 0.01
 res_list = lapply(c(1:(length(ms)*3)), function(i) {return(matrix(NA,nrow=3,ncol=num_exps))})
 ```
@@ -80,7 +80,7 @@ y.train = y[train.index]; y.test = y[test.index]
 
 # radial basis kernel function
 t1 = Sys.time()
-rbf.hcp = gausspr(x=X.train, y=y.train)
+rbf.hcp = gausspr(x=X.train, y=y.train, var=1e-2, scaled=FALSE)
 train_pred.hcp = predict(rbf.hcp, X.train)
 test_pred.hcp = predict(rbf.hcp, X.test)
 t2 = Sys.time()
@@ -93,9 +93,10 @@ res_list[[3*i-1]][1,num_exp] = mse_test.rbf.win
 res_list[[3*i]][1,num_exp] = as.numeric(t2-t1, units="hours")*3600
 
 
+if(FALSE) {
 # GLGP
 t1 = Sys.time()
-res_glgp.hcp = fit_gl_regression_gp_rcpp(X.train, y.train, X.test, K, models = models, noise = "same", sigma = 1e-2, sparse = FALSE)
+res_glgp.hcp = fit_gl_regression_gp_rcpp(X.train, y.train, X.test, K, noise = "same", sigma = 1e-2, sparse = FALSE)
 t2 = Sys.time()
 t2 - t1
 y_glgp.hcp = res_glgp.hcp$Y_pred
@@ -109,12 +110,13 @@ mse_test.glgp.win = mean(sort((y.test-test_pred_glgp.hcp)^2)[round((n-m)*a):roun
 res_list[[3*i-2]][2,num_exp] = mse_train.glgp.hcp
 res_list[[3*i-1]][2,num_exp] = mse_test.glgp.win
 res_list[[3*i]][2,num_exp] = as.numeric(t2-t1, units="hours")*3600
+}
 
 if(TRUE) {
 # Nystrom extension
-models$subsample = "kmeans"
 t1 = Sys.time()
-res_nystrom.hcp = fit_nystrom_regression_gp_rcpp(X.train, y.train, X.test, s, K, models = models, noise = "same", sigma = 1e-2)
+bwd = exp(seq(log(0.1),log(10),length.out=20))
+res_nystrom.hcp = fit_nystrom_regression_gp_rcpp(X.train, y.train, X.test, s, K, a2s = bwd, noise = "same", sigma = 1e-2)
 t2 = Sys.time()
 y_nystrom.hcp = res_nystrom.hcp$Y_pred
 train_pred_nystrom.hcp = y_nystrom.hcp$train
@@ -124,16 +126,16 @@ mse_train.nystrom.hcp = mean((y.train-train_pred_nystrom.hcp)^2)
 mse_test.nystrom.hcp = mean((y.test-test_pred_nystrom.hcp)^2)
 mse_test.nystrom.win = mean(sort((y.test-test_pred_nystrom.hcp)^2)[round((n-m)*a):round((n-m)*(1-a))])
 
-res_list[[3*i-2]][3,num_exp] = mse_train.nystrom.hcp
-res_list[[3*i-1]][3,num_exp] = mse_test.nystrom.win
-res_list[[3*i]][3,num_exp] = as.numeric(t2-t1, units="hours")*3600
+res_list[[3*i-2]][2,num_exp] = mse_train.nystrom.hcp
+res_list[[3*i-1]][2,num_exp] = mse_test.nystrom.win
+res_list[[3*i]][2,num_exp] = as.numeric(t2-t1, units="hours")*3600
 }
 
 
 # LKFLGP
 models$subsample = "kmeans"; models$gl = "cluster-normalized"
 t1 = Sys.time()
-res_lkflag.hcp = fit_lae_regression_gp_rcpp(X.train, y.train, X.test, s, r, K, models = models, noise = "same", sigma = 1e-3)
+res_lkflag.hcp = fit_lae_regression_gp_rcpp(X.train, y.train, X.test, s, r, K, models = models, noise = "same", sigma = 1e-2)
 t2 = Sys.time()
 y_lkflag.hcp = res_lkflag.hcp$Y_pred
 train_pred_lkflag.hcp = y_lkflag.hcp$train
@@ -143,9 +145,9 @@ mse_train.lkflag.hcp = mean((y.train-train_pred_lkflag.hcp)^2)
 mse_test.lkflag.hcp = mean((y.test-test_pred_lkflag.hcp)^2)
 mse_test.lkflag.win = mean(sort((y.test-test_pred_lkflag.hcp)^2)[round((n-m)*a):round((n-m)*(1-a))])
 
-res_list[[3*i-2]][4,num_exp] = mse_train.lkflag.hcp
-res_list[[3*i-1]][4,num_exp] = mse_test.lkflag.win
-res_list[[3*i]][4,num_exp] = as.numeric(t2-t1, units="hours")*3600
+res_list[[3*i-2]][3,num_exp] = mse_train.lkflag.hcp
+res_list[[3*i-1]][3,num_exp] = mse_test.lkflag.win
+res_list[[3*i]][3,num_exp] = as.numeric(t2-t1, units="hours")*3600
 
 
 if(FALSE) {
@@ -184,9 +186,9 @@ print(time_diff)
 ## manipulate results
 ```{r}
 cat("The number of total samples is n = ",n,":\n", sep = "")
-res_table = as.data.frame(matrix(0,nrow=4,ncol=length(ms)*3))
+res_table = as.data.frame(matrix(0,nrow=3,ncol=length(ms)*3))
 colnames(res_table) = rep(c("train mse", "test mse", "time"), length(ms))
-rownames(res_table) = c("RBF GP", "GLGP", "Nystrom", "LKFLGP")
+rownames(res_table) = c("RBF GP", "Nystrom", "LKFLGP")
 
 mydigits = 3
 
@@ -200,7 +202,7 @@ for(i in c(1:length(ms))) {
   test_mse_mean = round(rowMeans(res_list[[(3*i-1)]]), digits = mydigits)
   test_mse_std = round(apply(res_list[[(3*i-1)]], 1, sd), digits = mydigits)
   
-  for(j in c(1:4)) {
+  for(j in c(1:3)) {
     res_table[j,(3*i-2)] = paste0(train_mse_mean[j],"(",train_mse_std[j],")")
     res_table[j,(3*i-1)] = paste0(test_mse_mean[j],"(",test_mse_std[j],")")
   }

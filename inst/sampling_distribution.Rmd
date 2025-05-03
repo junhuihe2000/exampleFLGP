@@ -1,0 +1,162 @@
+---
+title: "Sampling distribution"
+author: "He Junhui"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(FLGP)
+library(kernlab)
+library(ggplot2)
+library(latex2exp)
+```
+
++ spiral case
+
+```{r}
+set.seed(1234)
+```
+
++ density plots
+
+```{r}
+n = 2000
+theta = seq(0, 8*pi, length.out=n)
+z_1 = rep(1/(8*pi), n)
+z_2 = c(rep(9/(40*pi),n/4), rep(1/(40*pi),n/4), rep(9/(40*pi),n/4), rep(1/(40*pi),n/4))
+z_3 = rep(1/16*sin(theta[1:(n/4)]/2), 4)
+```
+
+```{r}
+p_1 = ggplot() + geom_line(aes(theta,z_1)) + xlab(TeX("0\\leq \\theta \\leq 8\\pi")) + ylab("Density")
+p_2 = ggplot() + geom_line(aes(theta,z_2)) + xlab(TeX("0\\leq \\theta \\leq 8\\pi")) + ylab("Density")
+p_3 = ggplot() + geom_line(aes(theta,z_3)) + xlab(TeX("0\\leq \\theta \\leq 8\\pi")) + ylab("Density")
+```
+
+```{r}
+mypath = "G:/Rtext/Rstudio/exampleFLGP/inst/plots/sampling distribution"
+ggsave(file.path(mypath, "density_1.pdf"), p_1, width=5, height=3)
+ggsave(file.path(mypath, "density_2.pdf"), p_2, width=5, height=3)
+ggsave(file.path(mypath, "density_3.pdf"), p_3, width=5, height=3)
+```
+
+
++ generate samples
+
+```{r}
+generate_spiral <- function(theta) {
+  x = cbind((theta+4)^(0.7)*cos(theta), (theta+4)^(0.7)*sin(theta))
+  return(x)
+}
+
+generate_response <- function(theta) {
+  y = 3*sin(theta/10) + 3*cos(theta/2) + 4*sin(4*theta/5)
+  return(y)
+}
+```
+
+
+```{r}
+set.seed(1234)
+n = 10000
+# three distributions
+theta_1 = runif(n, 0, 8*pi)
+theta_2 = c(runif(9/20*n, 0, 2*pi), runif(1/20*n, 2*pi, 4*pi), runif(9/20*n, 4*pi, 6*pi), runif(1/20*n, 6*pi, 8*pi))
+theta_3 = c(2*acos(1-2*runif(n/4,0,1)), 2*acos(1-2*runif(n/4,0,1))+2*pi, 2*acos(1-2*runif(n/4,0,1))+4*pi, 2*acos(1-2*runif(n/4,0,1))+6*pi)
+```
+
+```{r}
+x_1 = generate_spiral(theta_1)
+y_1 = generate_response(theta_1)
+x_2 = generate_spiral(theta_2)
+y_2 = generate_response(theta_2)
+x_3 = generate_spiral(theta_3)
+y_3 = generate_response(theta_3)
+```
+
+```{r}
+xs = list(x_1, x_2, x_3)
+ys = list(y_1, y_2, y_3)
+```
+
+
+```{r}
+n_exp = 50
+m = 100
+sigma = 0.5
+errors = array(dim=c(5,3,n_exp))
+```
+
+```{r}
+s = 500; r = 5; K = 50
+models = list(subsample="kmeans", kernel="lae", gl="cluster-normalized", root=TRUE)
+```
+
+
+```{r, include=FALSE}
+t_1 = Sys.time()
+for(l in 1:n_exp) {
+  for(j in 1:3) {
+    x = xs[[j]]; y = ys[[j]]
+    train.index = sample.int(n,m); test.index = c(1:n)[-train.index]
+    x.train = x[train.index,]; x.test = x[test.index,]
+    y.train = y[train.index]+rnorm(m,0,sigma); y.test = y[test.index]
+    # squared exponential kernel
+    egp = gausspr(x.train,y.train,var=0.001)
+    y_egp = predict(egp,x.test)
+    mse_egp = mean((y_egp-y.test)^2)
+    errors[1,j,l] = mse_egp
+    # SRFLGP
+    models$subsample = "random"; models$kernel = "se"; models$gl = "normalized"
+    y_sr = fit_se_regression_gp_rcpp(x.train, y.train, x.test, s, r, K, models=models)$Y_pred
+    mse_sr = mean((y_sr$test-y.test)^2)
+    errors[2,j,l] = mse_sr
+    # SKFLGP
+    models$subsample = "kmeans"; models$kernel = "se"; models$gl = "cluster-normalized"
+    y_sk = fit_se_regression_gp_rcpp(x.train, y.train, x.test, s, r, K, models=models)$Y_pred
+    mse_sk = mean((y_sk$test-y.test)^2)
+    errors[3,j,l] = mse_sk
+    # LRFLGP
+    models$subsample = "random"; models$kernel = "lae"; models$gl = "normalized"
+    y_lr = fit_lae_regression_gp_rcpp(x.train, y.train, x.test, s, r, K, models=models)$Y_pred
+    mse_lr = mean((y_lr$test-y.test)^2)
+    errors[4,j,l] = mse_lr
+    # LKFLGP
+    models$subsample = "kmeans"; models$kernel = "lae"; models$gl = "cluster-normalized"
+    y_lk = fit_lae_regression_gp_rcpp(x.train, y.train, x.test, s, r, K, models=models)$Y_pred
+    mse_lk = mean((y_lk$test-y.test)^2)
+    errors[5,j,l] = mse_lk
+  }
+}
+t_2 = Sys.time()
+```
+
+```{r}
+t_2 - t_1
+```
+
++ manipulate results
+
+```{r}
+cat("The number of total samples is ",n,".\n", sep = "")
+res_table = as.data.frame(matrix(0,nrow=5,ncol=3))
+rownames(res_table) = c("EGP", "SRFLGP", "SKFLGP", "LRFLGP", "LKFLGP")
+mydigits = 2
+for(i in 1:5) {
+  for(j in 1:3) {
+    error_mean = round(mean(errors[i,j,]), mydigits)
+    error_std = round(sd(errors[i,j,]), mydigits)
+    res_table[i,j] = paste0(error_mean,"(",error_std,")")
+  }
+}
+```
+
+```{r}
+write.csv(res_table, paste0("tables/sampling distribution/n=",n,".csv"))
+print(res_table)
+```

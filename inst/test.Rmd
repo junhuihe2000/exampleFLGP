@@ -1,0 +1,72 @@
+---
+title: "Test"
+author: "He Junhui"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(bigmemory)
+library(ClusterR)
+library(microbenchmark)
+library(FLGP)
+```
+
+```{r}
+inputpath = "G:/Phd/Data/MNIST/mnist/"
+xbmpca.mnist = read.big.matrix(paste0(inputpath, "images_pca.csv"), has.row.names =  TRUE, type = "double", skip = 1)
+y.mnist = read.big.matrix(paste0(inputpath, "labels.csv"), has.row.names = TRUE,
+                          type = "double", skip = 1)
+train.index = sample.int(70000, 7000)
+train.data = xbmpca.mnist[train.index,]
+```
+
+```{r}
+k = 1000
+```
+
+
+```{r}
+km = kmeans(xbmpca.mnist[,], k)
+```
+
+
+```{r}
+mnkm = MiniBatchKmeans(xbmpca.mnist[,], k, batch_size = 20000)
+```
+
+```{r}
+k = 1000
+microbenchmark(kmeans=kmeans(xbmpca.mnist[,], k, iter.max = 100),
+               mbkm=MiniBatchKmeans(xbmpca.mnist[,], k, batch_size = 20000, init_fraction = 0.1),
+               mbkm_v2=MiniBatchKmeans(xbmpca.mnist[,], k, batch_size = 20000),
+               times = 1)
+```
+
+```{r}
+k = 100
+microbenchmark(small=MiniBatchKmeans(train.data, k, batch_size = 2000),
+               big=MiniBatchKmeans(xbmpca.mnist[,], k, batch_size = 2000),
+               times = 10)
+```
+
+```{r}
+k = 100
+microbenchmark(small=MiniBatchKmeans(train.data, k, batch_size = 2000),
+               big=MiniBatchKmeans(xbmpca.mnist[,], k, batch_size = 2000, init_fraction = 0.1),
+               times = 10)
+```
+
+```{r}
+k = 100
+mnkm = MiniBatchKmeans(xbmpca.mnist[,], k, batch_size = 2000, init_fraction = 0.1)
+```
+
+```{r}
+size = predict_MBatchKMeans(xbmpca.mnist[,], mnkm$centroids)
+```
+

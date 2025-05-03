@@ -1,0 +1,69 @@
+---
+title: "process HCP FMRI"
+author: "He Junhui"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
++ Modify the data file path
+```{r}
+# TO DO
+pathpre = "path to data file directory"
+# pathpre = "G:/Phd/Data/HCPFMRI/WM_contrasts"
+pathsuf = "_2bk-0bk.nii"
+```
+
+```{r}
+if(!require("oro.nifti")) {install.packages("oro.nifti")}
+if(!require("neurobase")) {install.packages("neurobase")}
+if(!require("readxl")) {install.packages("readxl")}
+library(oro.nifti)
+library(neurobase)
+library(readxl)
+```
+
+```{r}
+if(!file.exists(file.path(pathpre, "brain"))) {dir.create(file.path(pathpre, "brain"))}
+if(!file.exists(file.path(pathpre, "tables"))) {dir.create(file.path(pathpre, "tables"))}
+```
+
++ read subjects
+
+```{r}
+index.subject = read.csv(file.path(pathpre, "index2bk-0bk.csv"))
+aal = readnii(file.path(pathpre, "AAL_MNI_2mm.nii"))
+# aal_region = read_excel(file.path(pathpre, "AALregion_full.xls"))
+```
+
++ extract the whole brain region data and frontal lobe region data
+```{r, include=FALSE}
+nsub = dim(index.subject)[1]
+# nsub = 10
+for(m in c(1:nsub)) {
+  subject = index.subject$subject[m]
+  img = readnii(file.path(pathpre, "WM_Contrasts", paste0(subject, pathsuf)))
+  # img = readnii(file.path(pathpre, "Contrasts", paste0(subject, pathsuf)))
+  dims = dim(img)
+  domains = !is.na(img)
+  n = sum(domains)
+  
+  data = matrix(NA,n,5)
+  colnames(data) = c("x1","x2", "x3", "y", "Code")
+  idx = 1
+  for(i in 1:dims[1]) {
+    for(j in 1:dims[2]) {
+      for(k in 1:dims[3]) {
+        if(domains[i,j,k]) {
+          data[idx,] = c(i,j,k,img[i,j,k],aal[i,j,k])
+          idx = idx + 1
+        }
+      }
+    }
+  }
+  write.csv(data, file.path(pathpre, "brain",paste0(subject,"_2bk-0bk.csv")), row.names = FALSE)
+}
+```

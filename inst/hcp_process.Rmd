@@ -23,22 +23,13 @@ pathsuf = "_2bk-0bk.nii"
 
 + draw fMRI image
 ```{r}
-tmp = readnii(paste0(pathpre, "templates/ch2.nii"))
+tmp = readnii(paste0(pathpre, "templates/MNI152_T1_2mm.nii"))
 tmp_img = readnii(paste0(pathpre, "templates/100206", pathsuf))
 ```
 
 ```{r}
-ortho2(tmp)
+ortho2(mni, crosshairs = FALSE)
 ```
-
-```{r}
-ortho2(tmp,y=abs(tmp_img)>qnorm(0.95))
-```
-
-```{r}
-ortho2(tmp,y=(abs(tmp_img)>quantile(abs(tmp_img[!is.na(tmp_img)]),0.975)))
-```
-
 
 
 ```{r}
@@ -139,11 +130,11 @@ writenii(act_count, paste0("G:/Phd/Data/HCPFMRI/2bk-0bk/activated_",100*p))
 
 
 ```{r}
-act_count = readnii(paste0("G:/Phd/Data/HCPFMRI/2bk-0bk/activated_90.nii"))
+act_count = readnii(paste0("G:/Phd/Data/HCPFMRI/2bk-0bk/activated_95.nii"))
 ```
 
 ```{r}
-act_idx = (act_count >= 3)
+act_idx = (act_count >= 2)
 act_idx_frontal = (act_idx & array(is.element(aal, aal_region$Code[3:16]), dim=dim(aal)))
 ```
 

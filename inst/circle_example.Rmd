@@ -14,8 +14,6 @@ library(ggplot2)
 library(ggpubr)
 library(kernlab)
 library(FLGP)
-library(pryr)
-library(lineprof)
 ```
 
 ```{r}
@@ -28,7 +26,7 @@ set.seed(1234)
 
 ```{r}
 # generate samples of torus
-n = 4800; n_each = 800; d = 3
+n = 9000; n_each = 1500; d = 3
 thetas = runif(n, 0, 2*pi)
 X = matrix(0, nrow=n, ncol=2); Y = matrix(0, nrow=n, ncol=1)
 X[,1] = cos(thetas); X[,2] = sin(thetas)
@@ -44,13 +42,13 @@ torus.df = data.frame(X,Y)
 
 ```{r}
 # classification
-m = 100
+m = 50
 train.index = sample.int(n, m); test.index = c(1:n)[-train.index]
 train.data = torus.df[train.index,]; test.data = torus.df[-train.index,]
 colnames(torus.df)[3] = "Class"
 ```
 
-```{r}
+```{r, fig.width=10, fig.height=10}
 ggplot() + geom_point(aes(X1,X2,color=Class), data=torus.df, size=0.6, alpha=0.6) +
   scale_color_manual(values = c("red", "orange")) + 
   theme(legend.position="none", 
@@ -58,19 +56,9 @@ ggplot() + geom_point(aes(X1,X2,color=Class), data=torus.df, size=0.6, alpha=0.6
 ```
 
 ```{r}
-ggsave("plots/circles/truth.eps", width = 7, height = 7, units = "in", dpi=300)
+# ggsave("plots/circles/truth.pdf", width = 7, height = 7, units = "in", dpi=300)
 ```
 
-
-```{r}
-# plot torus samples
-p1.cla = ggplot() + geom_point(aes(X1,X2,color=Y), data=test.data, size=0.6, alpha=0.6) +
-  scale_color_manual(values = c("red", "orange")) + 
-  geom_point(aes(train.data[,1],train.data[,2]), color="black") + 
-  theme(legend.position="none", 
-        axis.title.x=element_blank(), axis.title.y=element_blank()) +
-  ggtitle("")
-```
 
 ```{r}
 # radial basis kernel function
@@ -83,14 +71,23 @@ err.rbf.torus
 ```
 
 ```{r}
-# plot
-p2.cla = ggplot() + geom_point(aes(test.data[,1],test.data[,2],color=pred_label.torus), size=0.6, alpha=0.6) + 
-  scale_color_manual(values = c("red", "orange")) + 
-  geom_point(aes(train.data[,1],train.data[,2]), color="black") + 
-  theme(legend.position="none", 
-        axis.title.x=element_blank(), axis.title.y=element_blank()) + 
-  ggtitle("")
+kernel = rbf.torus@kernelf
+scale = rbf.torus@scaling$x.scale
+train.data.scale = scale(train.data[,1:2], scale$`scaled:center`, scale$`scaled:scale`)
+test.data.scale = scale(test.data[,1:2], scale$`scaled:center`, scale$`scaled:scale`)
+C11 = kernelMatrix(kernel, train.data.scale)
+C21 = kernelMatrix(kernel, test.data.scale, train.data.scale)
+C22 = rep(1,n-m)
 ```
+
+```{r}
+post = posterior_distribution_classification(C11,C21,cbind(C22),(as.numeric(train.data[,3])-1))
+mean = cbind(post$mean)
+cov = cbind(post$cov)
+nll_rbf = negative_log_likelihood(mean, cov, (as.numeric(test.data[,3])-1), "binary")
+nll_rbf
+```
+
 
 ```{r}
 # ksvm
@@ -114,6 +111,8 @@ pksvm = ggplot() + geom_point(aes(test.data[,1],test.data[,2],color=pred_label.k
   ggtitle("")
 ```
 
++ process data
+
 ```{r}
 # FLGP
 # process data
@@ -122,19 +121,20 @@ X.scale.torus = scale(as.matrix(torus.order[ ,1:(d-1)]), center = TRUE, scale = 
 X.scale.torus = X.scale.torus / sqrt(ncol(X.scale.torus))
 
 f.torus = as.numeric(train.data[,d])-1
+f_test.torus = as.numeric(test.data[,d])-1
 ```
 
 ```{r}
 # hyper parameters
-s = 600; r = 3; K = 100
-models = list(subsample="kmeans", kernel="lae", gl="cluster-normalized", root=TRUE)
+K = 100
 ```
 
 + GLGP
 ```{r}
 # GLGP
 t1 = Sys.time()
-res_gl.torus = fit_gl_logit_gp_rcpp(X.scale.torus[1:m,], f.torus, X.scale.torus[(m+1):n,], K, sparse = FALSE, models = models, output_cov = TRUE)
+bandwidth_range = exp(seq(log(0.001),log(1),length.out=20))
+res_gl.torus = fit_gl_logit_gp_rcpp(X.scale.torus[1:m,], f.torus, X.scale.torus[(m+1):n,], K, a2s = bandwidth_range, sparse = FALSE, output_cov = TRUE)
 y_pred_gl.torus = as.factor(res_gl.torus$Y_pred$test)
 t2 = Sys.time()
 t2 - t1
@@ -146,45 +146,20 @@ err_gl.torus
 ```
 
 ```{r}
-# plot
-p3.cla = ggplot() + geom_point(aes(test.data[,1],test.data[,2],color=y_pred_gl.torus), size=0.6, alpha=0.6) + 
-  scale_color_manual(values = c("red", "orange")) + 
-  geom_point(aes(train.data[,1],train.data[,2]), color="black") + 
-  theme(legend.position="none", 
-        axis.title.x=element_blank(), axis.title.y=element_blank()) + 
-  ggtitle("")
-```
-
-+ sparseGLGP
-```{r}
-# sparseGLGP
-t1 = Sys.time()
-res_glsp.torus = fit_gl_logit_gp_rcpp(X.scale.torus[1:m,], f.torus, X.scale.torus[(m+1):n,], K, threshold = 0.01, sparse = TRUE, models = models, output_cov = TRUE)
-y_pred_glsp.torus = as.factor(res_glsp.torus$Y_pred$test)
-t2 = Sys.time()
-t2 - t1
-```
-
-```{r}
-err_glsp.torus = sum((test.data[,d]!=y_pred_glsp.torus)^2)/(n-m)
-err_glsp.torus
-```
-
-```{r}
-# plot
-p4.cla = ggplot() + geom_point(aes(test.data[,1],test.data[,2],color=y_pred_glsp.torus), size=0.6, alpha=0.6) + 
-  scale_color_manual(values = c("red", "orange")) + 
-  geom_point(aes(train.data[,1],train.data[,2]), color="black") + 
-  theme(legend.position="none", 
-        axis.title.x=element_blank(), axis.title.y=element_blank()) + 
-  ggtitle("")
+mean = cbind(res_gl.torus$posterior$mean)
+cov = cbind(res_gl.torus$posterior$cov)
+nll_gl.torus = negative_log_likelihood(mean, cov, f_test.torus, "binary")
+nll_gl.torus
 ```
 
 + Nystrom extension
 ```{r}
 # Nystrom extension
+s = 600
+
 t1 = Sys.time()
-res_nystrom.torus = fit_nystrom_logit_gp_rcpp(X.scale.torus[1:m,], f.torus, X.scale.torus[(m+1):n,], s, K, models = models, output_cov = TRUE)
+bandwidth_range = exp(seq(log(0.001),log(1),length.out=20))
+res_nystrom.torus = fit_nystrom_logit_gp_rcpp(X.scale.torus[1:m,], f.torus, X.scale.torus[(m+1):n,], s, K, a2s = bandwidth_range, output_cov = TRUE)
 y_pred_nystrom.torus = as.factor(res_nystrom.torus$Y_pred$test)
 t2 = Sys.time()
 t2 - t1
@@ -196,13 +171,47 @@ err_nystrom.torus
 ```
 
 ```{r}
-# plot
-p5.cla = ggplot() + geom_point(aes(test.data[,1],test.data[,2],color=y_pred_nystrom.torus), size=0.6, alpha=0.6) + 
-  scale_color_manual(values = c("red", "orange")) + 
-  geom_point(aes(train.data[,1],train.data[,2]), color="black") + 
-  theme(legend.position="none", 
-        axis.title.x=element_blank(), axis.title.y=element_blank()) + 
-  ggtitle("")
+mean = cbind(res_nystrom.torus$posterior$mean)
+cov = cbind(res_nystrom.torus$posterior$cov)
+nll_nystrom.torus = negative_log_likelihood(mean, cov, f_test.torus, "binary")
+nll_nystrom.torus
+```
+
+-------------------------------------------------
+--- FLGP ---
+-------------------------------------------------
+
++ FLGP without subsampling
+
+```{r}
+s = n; r = 60
+models = list(subsample="random", gl="normalized", root=TRUE)
+
+t1 = Sys.time()
+bandwidth_range = exp(seq(log(0.1),log(10),length.out=20))
+res_flag.torus = fit_se_logit_gp_rcpp(X.scale.torus[1:m,], f.torus, X.scale.torus[(m+1):n,], s, r, K, models = models, a2s = bandwidth_range, output_cov = TRUE)
+y_pred_flag.torus = as.factor(res_flag.torus$Y_pred$test)
+t2 = Sys.time()
+t2 - t1
+```
+
+```{r}
+err_flag.torus = sum((test.data[,d]!=y_pred_flag.torus)^2)/(n-m)
+err_flag.torus
+```
+
+```{r}
+mean = cbind(res_flag.torus$posterior$mean)
+cov = cbind(res_flag.torus$posterior$cov)
+nll_flag.torus = negative_log_likelihood(mean, cov, f_test.torus, "binary")
+nll_flag.torus
+```
+
+
+```{r}
+# hyper parameters
+s = 600; r = 3
+models = list(subsample="kmeans", kernel="lae", gl="cluster-normalized", root=TRUE)
 ```
 
 + SRFLGP
@@ -213,7 +222,8 @@ models$subsample = "random"; models$gl = "normalized"
 
 ```{r}
 t1 = Sys.time()
-res_srflag.torus = fit_se_logit_gp_rcpp(X.scale.torus[1:m,], f.torus, X.scale.torus[(m+1):n,], s, r, K, models = models, output_cov = TRUE)
+bandwidth_range = exp(seq(log(0.1),log(10),length.out=20))
+res_srflag.torus = fit_se_logit_gp_rcpp(X.scale.torus[1:m,], f.torus, X.scale.torus[(m+1):n,], s, r, K, models = models, a2s = bandwidth_range, output_cov = TRUE)
 y_pred_srflag.torus = as.factor(res_srflag.torus$Y_pred$test)
 t2 = Sys.time()
 t2 - t1
@@ -225,13 +235,10 @@ err_srflag.torus
 ```
 
 ```{r}
-# plot
-p6.cla = ggplot() + geom_point(aes(test.data[,1],test.data[,2],color=y_pred_srflag.torus), size=0.6, alpha=0.6) + 
-  scale_color_manual(values = c("red", "orange")) + 
-  geom_point(aes(train.data[,1],train.data[,2]), color="black") + 
-  theme(legend.position="none", 
-        axis.title.x=element_blank(), axis.title.y=element_blank()) + 
-  ggtitle("")
+mean = cbind(res_srflag.torus$posterior$mean)
+cov = cbind(res_srflag.torus$posterior$cov)
+nll_sr.torus = negative_log_likelihood(mean, cov, f_test.torus, "binary")
+nll_sr.torus
 ```
 
 + SKFLGP
@@ -242,7 +249,8 @@ models$subsample = "kmeans"; models$gl = "cluster-normalized"
 
 ```{r}
 t1 = Sys.time()
-res_skflag.torus = fit_se_logit_gp_rcpp(X.scale.torus[1:m,], f.torus, X.scale.torus[(m+1):n,], s, r, K, models = models, output_cov = TRUE)
+bandwidth_range = exp(seq(log(0.1),log(10),length.out=20))
+res_skflag.torus = fit_se_logit_gp_rcpp(X.scale.torus[1:m,], f.torus, X.scale.torus[(m+1):n,], s, r, K, models = models, a2s = bandwidth_range, output_cov = TRUE)
 y_pred_skflag.torus = as.factor(res_skflag.torus$Y_pred$test)
 t2 = Sys.time()
 t2 - t1
@@ -254,13 +262,10 @@ err_skflag.torus
 ```
 
 ```{r}
-# plot
-p7.cla = ggplot() + geom_point(aes(test.data[,1],test.data[,2],color=y_pred_skflag.torus), size=0.6, alpha=0.6) + 
-  scale_color_manual(values = c("red", "orange")) + 
-  geom_point(aes(train.data[,1],train.data[,2]), color="black") + 
-  theme(legend.position="none", 
-        axis.title.x=element_blank(), axis.title.y=element_blank()) + 
-  ggtitle("")
+mean = cbind(res_skflag.torus$posterior$mean)
+cov = cbind(res_skflag.torus$posterior$cov)
+nll_sk.torus = negative_log_likelihood(mean, cov, f_test.torus, "binary")
+nll_sk.torus
 ```
 
 + LRFLGP
@@ -283,14 +288,12 @@ err_lrflag.torus
 ```
 
 ```{r}
-# plot
-p8.cla = ggplot() + geom_point(aes(test.data[,1],test.data[,2],color=y_pred_lrflag.torus), size=0.6, alpha=0.6) + 
-  scale_color_manual(values = c("red", "orange")) + 
-  geom_point(aes(train.data[,1],train.data[,2]), color="black") + 
-  theme(legend.position="none", 
-        axis.title.x=element_blank(), axis.title.y=element_blank()) + 
-  ggtitle("")
+mean = cbind(res_lrflag.torus$posterior$mean)
+cov = cbind(res_lrflag.torus$posterior$cov)
+nll_lr.torus = negative_log_likelihood(mean, cov, f_test.torus, "binary")
+nll_lr.torus
 ```
+
 
 + LKFLGP
 ```{r}
@@ -312,214 +315,132 @@ err_lkflag.torus = sum((test.data[,d]!=y_pred_lkflag.torus)^2)/(n-m)
 err_lkflag.torus
 ```
 
+
 ```{r}
-# plot
-p9.cla = ggplot() + geom_point(aes(test.data[,1],test.data[,2],color=y_pred_lkflag.torus), size=0.6, alpha=0.6) + 
-  scale_color_manual(values = c("red", "orange")) + 
-  geom_point(aes(train.data[,1],train.data[,2]), color="black") + 
-  theme(legend.position="none", 
-        axis.title.x=element_blank(), axis.title.y=element_blank()) + 
-  ggtitle("")
+mean = cbind(res_lkflag.torus$posterior$mean)
+cov = cbind(res_lkflag.torus$posterior$cov)
+nll_lk.torus = negative_log_likelihood(mean, cov, f_test.torus, "binary")
+nll_lk.torus
 ```
 
-+ Arrange on one page
-```{r}
-pres.cla = ggarrange(p1.cla,p2.cla,p3.cla,p4.cla,p5.cla,p6.cla,p7.cla,p8.cla,p9.cla,
-          ncol=3,nrow=3,
-          common.legend = TRUE)
-ggexport(pres.cla, filename = "plots/circles/classification.eps")
-ggexport(pres.cla, filename = "plots/circles/classification.pdf")
-```
 
 
 ## Covariance
 
 ```{r}
-Kernel_Matrix <- function(X, a, m) {
-  distances = rowSums(X^2) - 2*X%*%t(X[1:m,]) + matrix(rep(rowSums(X[1:m,]^2), each=nrow(X)), nrow(X), m)
-  return(exp(-distances/(2*a^2)))
-}
-```
-
-```{r}
 k = 1
+idx = sample.int(n,2000)
 ```
 
-+ original samples
-```{r}
-p1.cov = ggplot() + geom_point(aes(torus.order[,1],torus.order[,2]), color="blue", size=0.6) + 
-  geom_point(aes(train.data[k,1],train.data[k,2]), color="black", size=1.5) + 
-  theme(legend.position="none", 
-        axis.title.x=element_blank()) + 
-  ylab("y")
-```
 
 + RBF
 ```{r}
-a = 0.7752254
-H_rbf.torus = Kernel_Matrix(scale(as.matrix(torus.order[ ,1:(d-1)]), center = TRUE, scale = TRUE), a, m)
-cov_rbf.torus = H_rbf.torus[,k]/H_rbf.torus[k,k]
+H_rbf.torus = rbind(C11,C21)
+cov_rbf.torus = H_rbf.torus[idx,k]/H_rbf.torus[k,k]
 Covariance = cov_rbf.torus
-p2.cov = ggplot() + geom_point(aes(torus.order[,1],torus.order[,2],color=Covariance),size=0.6) + 
-  # scale_color_gradient2(low="blue", mid="green", high="red") + 
-  scale_color_gradientn(colours = c("blue","green","red"),label = function(x) sprintf("%.2f", x)) +
+p2.cov = ggplot() + geom_point(aes(torus.order[idx,1],torus.order[idx,2],color=Covariance),size=0.4) + 
+  scale_color_gradientn(colours = c("steelblue","green","red"),label = function(x) sprintf("%.2f", x)) +
   geom_point(aes(train.data[k,1],train.data[k,2]), color="black", size=1.5) + 
   theme(axis.title.x=element_blank(),axis.title.y=element_blank(),
         legend.text = element_text(size = 7)) + labs(colour="") +
-  theme(axis.text = element_text(size=7),legend.key.width = unit(0.3, "cm"))
+  theme(axis.text = element_text(size=7),legend.key.width = unit(2, "cm"))
 ```
 
 + GLGP
 ```{r}
 H_gl.torus = res_gl.torus$C
-cov_gl.torus = H_gl.torus[, k]/H_gl.torus[k,k]
-p3.cov = ggplot() + geom_point(aes(torus.order[,1],torus.order[,2],color=cov_gl.torus),size=0.6) + 
-  scale_color_gradientn(colours = c("blue","green","red"),label = function(x) sprintf("%.2f", x)) +
+cov_gl.torus = H_gl.torus[idx, k]/H_gl.torus[k,k]
+p3.cov = ggplot() + geom_point(aes(torus.order[idx,1],torus.order[idx,2],color=cov_gl.torus),size=0.4) + 
+  scale_color_gradientn(colours = c("steelblue","green","red"),label = function(x) sprintf("%.2f", x)) +
   geom_point(aes(train.data[k,1],train.data[k,2]), color="black", size=1.5) + 
-  theme(axis.title.x=element_blank(), axis.title.y=element_blank(),
-        legend.text = element_text(size = 7)) + labs(colour="") +
-  theme(axis.text = element_text(size=7),legend.key.width = unit(0.3, "cm"))
-```
-
-+ sparseGLGP
-```{r}
-H_glsp.torus = res_glsp.torus$C
-cov_glsp.torus = H_glsp.torus[, k]/H_glsp.torus[k,k]
-p4.cov = ggplot() + geom_point(aes(torus.order[,1],torus.order[,2],color=cov_glsp.torus),size=0.6) + 
-  scale_color_gradientn(colours = c("blue","green","red"),label = function(x) sprintf("%.2f", x)) +
-  geom_point(aes(train.data[k,1],train.data[k,2]), color="black", size=1.5) + 
-  theme(axis.title.x=element_blank(),axis.title.y=element_blank(),
-        legend.text = element_text(size = 7)) + labs(colour="") +
-  theme(axis.text = element_text(size=7),legend.key.width = unit(0.3, "cm"))
+  theme(axis.title.x=element_blank(), axis.title.y=element_blank()) + labs(colour="") +
+  theme(axis.text = element_text(size=7))
 ```
 
 + Nystrom extension
 ```{r}
 H_nystrom.torus = res_nystrom.torus$C
-cov_nystrom.torus = H_nystrom.torus[, k]/H_nystrom.torus[k,k]
-p5.cov = ggplot() + geom_point(aes(torus.order[,1],torus.order[,2],color=cov_nystrom.torus),size=0.6) + 
-  scale_color_gradientn(colours = c("blue","green","red"),label = function(x) sprintf("%.2f", x)) +
+cov_nystrom.torus = H_nystrom.torus[idx,k]/H_nystrom.torus[k,k]
+p4.cov = ggplot() + geom_point(aes(torus.order[idx,1],torus.order[idx,2],color=cov_nystrom.torus),size=0.4) + 
+  scale_color_gradientn(colours = c("steelblue","green","red"),label = function(x) sprintf("%.2f", x)) +
   geom_point(aes(train.data[k,1],train.data[k,2]), color="black", size=1.5) + 
-  theme(axis.title.x=element_blank(),axis.title.y=element_blank(),
-        legend.text = element_text(size = 7)) + labs(colour="") +
-  theme(axis.text = element_text(size=7),legend.key.width = unit(0.3, "cm"))
+  theme(axis.title.x=element_blank(),axis.title.y=element_blank()) + labs(colour="") +
+  theme(axis.text = element_text(size=7))
 ```
+
++ FLGP without subsampling
+```{r}
+H_flag.torus = res_flag.torus$C
+cov_flag.torus = H_flag.torus[idx,k]/H_flag.torus[k,k]
+p5.cov = ggplot() + geom_point(aes(torus.order[idx,1],torus.order[idx,2],color=cov_flag.torus),size=0.4) + 
+  scale_color_gradientn(colours = c("steelblue","green","red"),label = function(x) sprintf("%.2f", x)) +
+  geom_point(aes(train.data[k,1],train.data[k,2]), color="black", size=1.5) + 
+  theme(axis.title.x=element_blank(), axis.title.y=element_blank()) + labs(colour="") +
+  theme(axis.text = element_text(size=7))
+```
+
 
 + SRFLGP
 ```{r}
 H_srflag.torus = res_srflag.torus$C
-cov_srflag.torus = H_srflag.torus[, k]/H_srflag.torus[k,k]
-p6.cov = ggplot() + geom_point(aes(torus.order[,1],torus.order[,2],color=cov_srflag.torus),size=0.6) + 
-  scale_color_gradientn(colours = c("blue","green","red"),label = function(x) sprintf("%.2f", x)) +
+cov_srflag.torus = H_srflag.torus[idx,k]/H_srflag.torus[k,k]
+p6.cov = ggplot() + geom_point(aes(torus.order[idx,1],torus.order[idx,2],color=cov_srflag.torus),size=0.4) + 
+  scale_color_gradientn(colours = c("steelblue","green","red"),label = function(x) sprintf("%.2f", x)) +
   geom_point(aes(train.data[k,1],train.data[k,2]), color="black", size=1.5) + 
-  theme(axis.title.x=element_blank(), axis.title.y=element_blank(),
-        legend.text = element_text(size = 7)) + labs(colour="") +
-  theme(axis.text = element_text(size=7),legend.key.width = unit(0.3, "cm"))
+  theme(axis.title.x=element_blank(), axis.title.y=element_blank()) + labs(colour="") +
+  theme(axis.text = element_text(size=7))
 ```
 
 + SKFLGP
 ```{r}
 H_skflag.torus = res_skflag.torus$C
-cov_skflag.torus = H_skflag.torus[, k]/H_skflag.torus[k,k]
-p7.cov = ggplot() + geom_point(aes(torus.order[,1],torus.order[,2],color=cov_skflag.torus),size=0.6) + 
-  scale_color_gradientn(colours = c("blue","green","red"),label = function(x) sprintf("%.2f", x)) +
+cov_skflag.torus = H_skflag.torus[idx,k]/H_skflag.torus[k,k]
+p7.cov = ggplot() + geom_point(aes(torus.order[idx,1],torus.order[idx,2],color=cov_skflag.torus),size=0.4) + 
+  scale_color_gradientn(colours = c("steelblue","green","red"),label = function(x) sprintf("%.2f", x)) +
   geom_point(aes(train.data[k,1],train.data[k,2]), color="black", size=1.5) + 
-  theme(axis.title.x=element_blank(),axis.title.y=element_blank(),
-        legend.text = element_text(size = 7)) + labs(colour="") +
-  theme(axis.text = element_text(size=7),legend.key.width = unit(0.3, "cm"))
+  theme(axis.title.x=element_blank(),axis.title.y=element_blank()) + labs(colour="") +
+  theme(axis.text = element_text(size=7))
 ```
 
 + LRFLGP
 ```{r}
 H_lrflag.torus = res_lrflag.torus$C
-cov_lrflag.torus = H_lrflag.torus[, k]/H_lrflag.torus[k,k]
-p8.cov = ggplot() + geom_point(aes(torus.order[,1],torus.order[,2],color=cov_lrflag.torus),size=0.6) + 
-  scale_color_gradientn(colours = c("blue","green","red"),label = function(x) sprintf("%.2f", x)) +
+cov_lrflag.torus = H_lrflag.torus[idx,k]/H_lrflag.torus[k,k]
+p8.cov = ggplot() + geom_point(aes(torus.order[idx,1],torus.order[idx,2],color=cov_lrflag.torus),size=0.4) + 
+  scale_color_gradientn(colours = c("steelblue","green","red"),label = function(x) sprintf("%.2f", x)) +
   geom_point(aes(train.data[k,1],train.data[k,2]), color="black", size=1.5) + 
-  theme(axis.title.x=element_blank(),axis.title.y=element_blank(),
-        legend.text = element_text(size = 7)) + labs(colour="") +
-  theme(axis.text = element_text(size=7),legend.key.width = unit(0.3, "cm"))
+  theme(axis.title.x=element_blank(),axis.title.y=element_blank()) + labs(colour="") +
+  theme(axis.text = element_text(size=7))
 ```
 
 + LKFLGP
 ```{r}
 H_lkflag.torus = res_lkflag.torus$C
-cov_lkflag.torus = H_lkflag.torus[, k]/H_lkflag.torus[k,k]
-p9.cov = ggplot() + geom_point(aes(torus.order[,1],torus.order[,2],color=cov_lkflag.torus),size=0.6) + 
-  scale_color_gradientn(colours = c("blue","green","red"),label = function(x) sprintf("%.2f", x)) +
+cov_lkflag.torus = H_lkflag.torus[idx,k]/H_lkflag.torus[k,k]
+p9.cov = ggplot() + geom_point(aes(torus.order[idx,1],torus.order[idx,2],color=cov_lkflag.torus),size=0.4) + 
+  scale_color_gradientn(colours = c("steelblue","green","red"),label = function(x) sprintf("%.2f", x)) +
   geom_point(aes(train.data[k,1],train.data[k,2]), color="black", size=1.5) + 
-  theme(axis.title.x=element_blank(),axis.title.y=element_blank(),legend.text = element_text(size = 7)) + labs(colour="") +
-  theme(axis.text = element_text(size=7),legend.key.width = unit(0.3, "cm"))
+  theme(axis.title.x=element_blank(),axis.title.y=element_blank()) + labs(colour="") +
+  theme(axis.text = element_text(size=7))
 ```
+
+```{r}
+p_empty = ggplot() + theme_void()
+```
+
 
 + Arrange on one page
 ```{r}
-presfull.cov = ggarrange(p2.cov,p3.cov,p4.cov,p5.cov,p6.cov,p7.cov,p8.cov,p9.cov,
-          ncol=3,nrow=3,
-          common.legend = FALSE)
-presfull.cov
+plot.cov = ggarrange(p2.cov,p3.cov,p4.cov,p5.cov,p6.cov,p7.cov,p8.cov,p9.cov,
+          ncol=4,nrow=2,
+          common.legend = TRUE)
+plot.cov
 ```
 
 ```{r}
-ggexport(presfull.cov, filename = "plots/circles/fullcovariance.eps")
-ggexport(presfull.cov, filename = "plots/circles/fullcovariance.pdf")
+ggexport(plot.cov, filename = "plots/circles_revision/covariance.pdf")
 ```
 
-```{r}
-pres.cov = ggarrange(p2.cov,p3.cov,p5.cov,p6.cov,p7.cov,p8.cov,p9.cov,
-          ncol=3,nrow=3,
-          common.legend = FALSE)
-pres.cov
-```
-
-```{r}
-ggexport(pres.cov, filename = "plots/circles/covariance.eps")
-ggexport(pres.cov, filename = "plots/circles/covariance.pdf")
-```
-
-## Others
-```{r}
-if(FALSE) {
-# plot error rates versus representative points' counts s
-# hyper parameters
-rps = seq(200, 1500, by=20); r = 3; Ks = rps
-err_rgl_reg_s.torus = rep(0, length(rps))
-
-t1 = Sys.time()
-for(i in 1:length(rps)) {
-  H_rgl.torus = Rep_GL_Reg_PM_NR(X.scale.torus, f.torus, rps[i], r, m, ks[i])
-  z_rgl.torus = solve(H_rgl.torus[1:m,1:m]+1e-10*diag(rep(1,m)), f.torus)
-  f_pred_rgl.torus = H_rgl.torus[(m+1):n, 1:m]%*%z_rgl.torus
-  y_pred_rgl_reg.torus = as.factor(as.numeric(f_pred_rgl.torus>0))
-  err_rgl_reg_s.torus[i] = sum((test.data[,d]!=y_pred_rgl_reg.torus)^2)/(n-m)
-}
-
-t2 = Sys.time()
-t2 - t1
-
-# plot
-ggplot() + geom_point(aes(x=rps,y=err_rgl_reg_s.torus)) +
-  geom_smooth(aes(x=rps,y=err_rgl_reg_s.torus), color="red") +
-  xlab("representative points' count s") + ylab("error rates") + 
-  ggtitle("error rates versus representative points' count")
 
 
-
-# plot the log posterior density function versus diffusion time t
-# hyper parameters
-s = 600; r = 3; Ks = s
-
-ts = seq(1, 60, by=0.1)
-t1 = Sys.time()
-eigenpairs = Rep_SVD_from_data(X.scale.torus, s, r)
-logps = sapply(X=ts, FUN=Log_Posterior, eigenpairs=eigenpairs, Y=f.torus, K=K)
-t2 = Sys.time()
-t2 - t1
-
-# plot
-ggplot() + geom_point(aes(x=ts,y=logps)) +
-  xlab("diffusion time t") + ylab("log(p(t|f))") +
-  ggtitle("log posterior density versus diffusion time")
-}
-```
 

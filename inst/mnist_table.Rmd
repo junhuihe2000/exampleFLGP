@@ -10,10 +10,12 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r}
+library(devtools)
 library(kernlab)
 library(FLGP)
 library(microbenchmark)
 library(bigmemory)
+load_all()
 ```
 
 ```{r}
@@ -21,13 +23,13 @@ library(bigmemory)
 # The second example
 # MNIST examples
 # 70000 * 28 * 28
-
+setwd("G:/Rtext/Rstudio/exampleFLGP/inst/")
 set.seed(1234)
 ```
 
 ```{r}
 # read mnist samples
-inputpath = "G:/Phd/Data/MNIST/mnist/"
+inputpath = "G:/Phd/Data/MNIST/augmnist/"
 # xbm.mnist = read.big.matrix(paste0(inputpath, "images.csv"), has.row.names =  TRUE, type = "double", skip = 1)
 ```
 
@@ -46,145 +48,208 @@ y.mnist = read.big.matrix(paste0(inputpath, "labels.csv"), has.row.names = TRUE,
 
 ## Experiment
 ```{r}
-n = dim(xbmpca.mnist)[1]
-n_used = 70000
-num_exps = 10 # experiment numbers
-ms = c(100,200) # number of labeled samples
-res_list = lapply(c(1:(length(ms)*2)), function(i) {return(matrix(NA,nrow=8,ncol=num_exps))})
+n = 700000
+num_exps = 5 # experiment numbers
+m = 200 # number of labeled samples
+errors = array(NA, c(9, num_exps))
+times = array(NA, c(9, num_exps))
+nlls = array(NA, c(8, num_exps))
 ```
 
 ```{r}
 # hyper parameters
-s = 1000; r = 3; K = 200
-models = list(subsample="kmeans", kernel="lae", gl="cluster-normalized", root=TRUE)
+s = 1000; r = 3; K = 100
+models = list(subsample="minibatchkmeans", kernel="lae", gl="cluster-normalized", root=TRUE)
 ```
 
 ```{r, include=FALSE}
 time_start = Sys.time()
 
-for(i in c(1:length(ms))) {
 
 for(num_exp in c(1:num_exps)) {
   
 
 cat("\n\n##########################################################\n")  
-cat(paste0("When m = ",ms[i],", the ",num_exp, "-th experiment:\n\n"))
+cat(paste0("When m = ",m,", the ",num_exp, "-th experiment:\n\n"))
   
 # classification
-m = ms[i]
 train.index = sample.int(n, m)
-test.index = sample(c(1:n)[-train.index],n_used-m)
+test.index = c(1:n)[-train.index]
 train.data = xbmpca.mnist[train.index,]; test.data = xbmpca.mnist[test.index,]
 y_train.mnist = y.mnist[train.index]; y_new.mnist = y.mnist[test.index]
 
+if(TRUE) {
 # radial basis kernel function
 t1 = Sys.time()
-rbf.mnist = gausspr(x=train.data, y=as.factor(y_train.mnist), type="classification", scaled = FALSE)
-pred_prob.mnist = predict(rbf.mnist, test.data, type="probabilities")
-pred_label.mnist = apply(pred_prob.mnist, 1, function(x) {return(which.max(x)-1)})
+rbf.model = train_multi_classification(train.data, y_train.mnist)
+rbf.mnist = predict_multi_classification(test.data, rbf.model)
+y_rbf.mnist = rbf.mnist$pred
 t2 = Sys.time()
-err.rbf.mnist = sum((y_new.mnist!=pred_label.mnist)^2)/(n_used-m)
+err.rbf.mnist = mean(y_new.mnist!=y_rbf.mnist)
+print(err.rbf.mnist)
 
-res_list[[2*i-1]][1,num_exp] = err.rbf.mnist
-res_list[[2*i]][1,num_exp] = as.numeric(t2-t1, units="hours")*3600
+mean = rbf.mnist$posterior$mean
+cov = rbf.mnist$posterior$cov
+nll_rbf.mnist = negative_log_likelihood(mean, cov, y_new.mnist, "multinomial")
 
+errors[1,num_exp] = err.rbf.mnist
+times[1,num_exp] = as.numeric(t2-t1, units="hours")*3600
+nlls[1,num_exp] = nll_rbf.mnist
+}
+
+
+if(FALSE) {
 # ksvm
 t1 = Sys.time()
-ksvm.mnist = ksvm(x=train.data, y=as.factor(y_train.mnist), 
-            type="C-svc")
+ksvm.mnist = ksvm(x=train.data, y=as.factor(y_train.mnist), type="C-svc", scaled=FALSE)
 pred_label.ksvm.mnist = predict(ksvm.mnist, test.data)
 t2 = Sys.time()
-err.ksvm.mnist = sum((y_new.mnist!=pred_label.ksvm.mnist)^2)/(n_used-m)
+err.ksvm.mnist = mean(y_new.mnist!=pred_label.ksvm.mnist)
+print(err.ksvm.mnist)
 
-res_list[[2*i-1]][2,num_exp] = err.ksvm.mnist
-res_list[[2*i]][2,num_exp] = as.numeric(t2-t1, units="hours")*3600
-
+errors[2,num_exp] = err.ksvm.mnist
+times[2,num_exp] = as.numeric(t2-t1, units="hours")*3600
+}
 
 # FLGP
 
-
 # GLGP
-if(n_used==7000) {
+if(FALSE) {
 t1 = Sys.time()
-y_gl.mnist = fit_gl_logit_mult_gp_rcpp(train.data, y_train.mnist, test.data, K,
-                                         sparse = FALSE, models = models)
+bwd = exp(seq(log(0.05),log(10),length.out=20))
+gl.mnist = fit_gl_logit_mult_gp_rcpp(train.data, y_train.mnist, test.data, K,
+                                         sparse = FALSE, a2s = bwd)
 t2 = Sys.time()
-err_gl.mnist = sum((y_new.mnist!=y_gl.mnist$test)^2)/(n_used-m)
+y_gl.mnist = gl.mnist$Y_pred
+err_gl.mnist = mean(y_new.mnist!=y_gl.mnist$test)
+print(err_gl.mnist)
 
-res_list[[2*i-1]][3,num_exp] = err_gl.mnist
-res_list[[2*i]][3,num_exp] = as.numeric(t2-t1, units="hours")*3600
+mean = gl.mnist$posterior$mean
+cov = gl.mnist$posterior$cov
+nll_gl.mnist = negative_log_likelihood(mean, cov, y_new.mnist, "multinomial")
+
+errors[3,num_exp] = err_gl.mnist
+times[3,num_exp] = as.numeric(t2-t1, units="hours")*3600
+nlls[2,num_exp] = nll_gl.mnist
 }
 
 
 
 if(FALSE){
 # sparseGLGP
-if(n_used==70000) {threshold = 0.001} else if(n_used==7000) {threshold = 0.01}
-
 t1 = Sys.time()
-y_glsp.mnist = fit_gl_logit_mult_gp_rcpp(train.data, y_train.mnist, test.data, K, threshold = threshold, sparse = TRUE, models = models)
+bwd = exp(seq(log(0.5),log(10),length.out=20))
+glsp.mnist = fit_gl_logit_mult_gp_rcpp(train.data, y_train.mnist, test.data, K, threshold = 0.002, sparse = TRUE, a2s = bwd)
 t2 = Sys.time()
-err_glsp.mnist = sum((y_new.mnist!=y_glsp.mnist$test)^2)/(n_used-m)
+y_glsp.mnist = glsp.mnist$Y_pred
+err_glsp.mnist = mean(y_new.mnist!=y_glsp.mnist$test)
+print(err_glsp.mnist)
 
-res_list[[2*i-1]][3,num_exp] = err_glsp.mnist
-res_list[[2*i]][3,num_exp] = as.numeric(t2-t1, units="hours")*3600
+mean = glsp.mnist$posterior$mean
+cov = glsp.mnist$posterior$cov
+nll_glsp.mnist = negative_log_likelihood(mean, cov, y_new.mnist, "multinomial")
+
+errors[4,num_exp] = err_glsp.mnist
+times[4,num_exp] = as.numeric(t2-t1, units="hours")*3600
+nlls[3,num_exp] = nll_glsp.mnist
 }
 
+if(TRUE) {
 # Nystrom extension
 t1 = Sys.time()
-y_nystrom.mnist = fit_nystrom_logit_mult_gp_rcpp(train.data, y_train.mnist, test.data, s, K, models = models)
+bwd = exp(seq(log(0.1),log(10),length.out=20))
+nystrom.mnist = fit_nystrom_logit_mult_gp_rcpp(train.data, y_train.mnist, test.data, s, K, a2s = bwd, subsample = "minibatchkmeans")
 t2 = Sys.time()
-err_nystrom.mnist = sum((y_new.mnist!=y_nystrom.mnist$test)^2)/(n_used-m)
+y_nystrom.mnist = nystrom.mnist$Y_pred
+err_nystrom.mnist = mean(y_new.mnist!=y_nystrom.mnist$test)
+print(err_nystrom.mnist)
 
-res_list[[2*i-1]][4,num_exp] = err_nystrom.mnist
-res_list[[2*i]][4,num_exp] = as.numeric(t2-t1, units="hours")*3600
+mean = nystrom.mnist$posterior$mean
+cov = nystrom.mnist$posterior$cov
+nll_nystrom.mnist = negative_log_likelihood(mean, cov, y_new.mnist, "multinomial")
 
+errors[5,num_exp] = err_nystrom.mnist
+times[5,num_exp] = as.numeric(t2-t1, units="hours")*3600
+nlls[4,num_exp] = nll_nystrom.mnist
+}
+
+if(TRUE) {
 # SRFLGP
 models$subsample = "random"; models$gl = "normalized"
 t1 = Sys.time()
-y_srflag.mnist = fit_se_logit_mult_gp_rcpp(train.data, y_train.mnist, test.data, s, r, K, models = models)
+bwd = exp(seq(log(0.1),log(10),length.out=20))
+srflag.mnist = fit_se_logit_mult_gp_rcpp(train.data, y_train.mnist, test.data, s, r, K, models = models, a2s = bwd)
 t2 = Sys.time()
-err_srflag.mnist = sum((y_new.mnist!=y_srflag.mnist$test)^2)/(n_used-m)
+y_srflag.mnist = srflag.mnist$Y_pred
+err_srflag.mnist = mean(y_new.mnist!=y_srflag.mnist$test)
+print(err_srflag.mnist)
 
-res_list[[2*i-1]][5,num_exp] = err_srflag.mnist
-res_list[[2*i]][5,num_exp] = as.numeric(t2-t1, units="hours")*3600
+mean = srflag.mnist$posterior$mean
+cov = srflag.mnist$posterior$cov
+nll_srflag.mnist = negative_log_likelihood(mean, cov, y_new.mnist, "multinomial")
+
+errors[6,num_exp] = err_srflag.mnist
+times[6,num_exp] = as.numeric(t2-t1, units="hours")*3600
+nlls[5,num_exp] = nll_srflag.mnist
 
 # SKFLGP
-models$subsample = "kmeans"; models$gl = "cluster-normalized"
+models$subsample = "minibatchkmeans"; models$gl = "cluster-normalized"
 t1 = Sys.time()
-y_skflag.mnist = fit_se_logit_mult_gp_rcpp(train.data, y_train.mnist, test.data, s, r, K, models = models)
+bwd = exp(seq(log(0.1),log(10),length.out=20))
+skflag.mnist = fit_se_logit_mult_gp_rcpp(train.data, y_train.mnist, test.data, s, r, K, models = models, a2s = bwd)
 t2 = Sys.time()
-err_skflag.mnist = sum((y_new.mnist!=y_skflag.mnist$test)^2)/(n_used-m)
+y_skflag.mnist = skflag.mnist$Y_pred
+err_skflag.mnist = mean(y_new.mnist!=y_skflag.mnist$test)
+print(err_skflag.mnist)
 
-res_list[[2*i-1]][6,num_exp] = err_skflag.mnist
-res_list[[2*i]][6,num_exp] = as.numeric(t2-t1, units="hours")*3600
+mean = skflag.mnist$posterior$mean
+cov = skflag.mnist$posterior$cov
+nll_skflag.mnist = negative_log_likelihood(mean, cov, y_new.mnist, "multinomial")
 
+errors[7,num_exp] = err_skflag.mnist
+times[7,num_exp] = as.numeric(t2-t1, units="hours")*3600
+nlls[6,num_exp] = nll_skflag.mnist
+}
 
+if(TRUE) {
 # LRFLGP
 models$subsample = "random"; models$gl = "normalized"
 t1 = Sys.time()
-y_lrflag.mnist = fit_lae_logit_mult_gp_rcpp(train.data, y_train.mnist, test.data, s, r, K, models = models)
+lrflag.mnist = fit_lae_logit_mult_gp_rcpp(train.data, y_train.mnist, test.data, s, r, K, models = models)
 t2 = Sys.time()
-err_lrflag.mnist = sum((y_new.mnist!=y_lrflag.mnist$test)^2)/(n_used-m)
+y_lrflag.mnist = lrflag.mnist$Y_pred
+err_lrflag.mnist = mean(y_new.mnist!=y_lrflag.mnist$test)
+print(err_lrflag.mnist)
 
-res_list[[2*i-1]][7,num_exp] = err_lrflag.mnist
-res_list[[2*i]][7,num_exp] = as.numeric(t2-t1, units="hours")*3600
+mean = lrflag.mnist$posterior$mean
+cov = lrflag.mnist$posterior$cov
+nll_lrflag.mnist = negative_log_likelihood(mean, cov, y_new.mnist, "multinomial")
+
+errors[8,num_exp] = err_lrflag.mnist
+times[8,num_exp] = as.numeric(t2-t1, units="hours")*3600
+nlls[7,num_exp] = nll_lrflag.mnist
+}
 
 
 # LKFLGP
-models$subsample = "kmeans"; models$gl = "cluster-normalized"
+models$subsample = "minibatchkmeans"; models$gl = "cluster-normalized"
 t1 = Sys.time()
-y_lkflag.mnist = fit_lae_logit_mult_gp_rcpp(train.data, y_train.mnist, test.data, s, r, K, models = models)
+lkflag.mnist = fit_lae_logit_mult_gp_rcpp(train.data, y_train.mnist, test.data, s, r, K, models = models)
 t2 = Sys.time()
-err_lkflag.mnist = sum((y_new.mnist!=y_lkflag.mnist$test)^2)/(n_used-m)
+y_lkflag.mnist = lkflag.mnist$Y_pred
+err_lkflag.mnist = mean(y_new.mnist!=y_lkflag.mnist$test)
+print(err_lkflag.mnist)
 
-res_list[[2*i-1]][8,num_exp] = err_lkflag.mnist
-res_list[[2*i]][8,num_exp] = as.numeric(t2-t1, units="hours")*3600
+mean = lkflag.mnist$posterior$mean
+cov = lkflag.mnist$posterior$cov
+nll_lkflag.mnist = negative_log_likelihood(mean, cov, y_new.mnist, "multinomial")
+
+errors[9,num_exp] = err_lkflag.mnist
+times[9,num_exp] = as.numeric(t2-t1, units="hours")*3600
+nlls[8,num_exp] = nll_lkflag.mnist
 
 gc()
 
-}
-  
 }
 
 time_end = Sys.time()
@@ -194,34 +259,59 @@ time_diff = time_end - time_start
 ```{r}
 print(time_diff)
 # Time difference of 36.04668 mins
-# Time difference of 1.412495 hours
+# Time difference of 2.251741 hours
+# Time difference of 7.510066 hours
+```
+
+
+```{r}
+save(list = c("errors", "nlls", "times"), file = paste0("data/mnist_data_",n,".Rdata"))
 ```
 
 
 ## manipulate results
-```{r}
-cat("The number of total samples is n_used = ",n_used,":\n", sep = "")
-res_table = as.data.frame(matrix(0,nrow=8,ncol=length(ms)*2))
-colnames(res_table) = rep(c("error rates", "time"), length(ms))
-rownames(res_table) = c("RBF GP", "RBF KSVM", "GLGP", "Nystrom extension", 
-                        "SRFLGP", "SKFLGP", "LRFLGP", "LKFLGP")
 
-mydigits = 1
-for(i in c(1:length(ms))) {
-  # time
-  res_table[,(2*i)] = round(rowMeans(res_list[[(2*i)]]), digits = mydigits)
-  
-  error_mean = round(rowMeans(res_list[[(2*i-1)]])*100, digits = mydigits)
-  error_std = round(apply(res_list[[(2*i-1)]]*100, 1, sd), digits = mydigits)
-  for(j in c(1:8)) {
-    res_table[j,(2*i-1)] = paste0(error_mean[j],"(",error_std[j],")")
-  }
+```{r}
+cat("The number of total samples is n = ",n,":\n", sep = "")
+errors_table = as.data.frame(rep(0,9))
+times_table = as.data.frame(round(rowMeans(times), digits = 1))
+nlls_table = as.data.frame(rep(0,8))
+rownames(errors_table) = c("EGP", "KSVM", "GLGP", "sparseGLGP", "Nystrom extension", 
+                        "SRFLGP", "SKFLGP", "LRFLGP", "LKFLGP")
+rownames(times_table) = c("EGP", "KSVM", "GLGP", "sparseGLGP", "Nystrom extension", 
+                        "SRFLGP", "SKFLGP", "LRFLGP", "LKFLGP")
+rownames(nlls_table) = c("EGP", "GLGP", "sparseGLGP", "Nystrom extension", 
+                        "SRFLGP", "SKFLGP", "LRFLGP", "LKFLGP")
+colnames(errors_table) = paste0("n = ",n)
+colnames(nlls_table) = paste0("n = ",n)
+colnames(times_table) = paste0("n = ",n)
+
+
+errors_mean = round(rowMeans(errors)*100, digits = 1)
+errors_sd = round(apply(errors*100, 1, sd), digits = 1)
+for(i in 1:9) {
+  errors_table[i,1] = paste0(errors_mean[i],"(",errors_sd[i],")")
 }
 
+nlls_mean = round(rowMeans(nlls), digits = 1)
+nlls_sd = round(apply(nlls, 1, sd), digits = 2)
+for(i in 1:8) {
+  nlls_table[i,1] = paste0(nlls_mean[i],"(",nlls_sd[i],")")
+}
+```
+
+
+```{r}
+write.csv(errors_table, paste0("tables/mnist_revision/errors_",n,".csv"))
+print(errors_table)
 ```
 
 ```{r}
-write.csv(res_table, paste0("tables/mnist/",n_used,".csv"))
-print(res_table)
+write.csv(nlls_table, paste0("tables/mnist_revision/nlls_",n,".csv"))
+print(nlls_table)
 ```
 
+```{r}
+write.csv(times_table, paste0("tables/mnist_revision/times_",n,".csv"))
+print(times_table)
+```

@@ -1,0 +1,10 @@
+,n = 70000
+EGP,27.4(3.3)
+KSVM,19.9(1.9)
+GLGP,NA(NA)
+sparseGLGP,7.8(2.9)
+Nystrom extension,12.8(1.9)
+SRFLGP,13.6(2.1)
+SKFLGP,7.1(2.1)
+LRFLGP,15.2(1.8)
+LKFLGP,7(1.4)

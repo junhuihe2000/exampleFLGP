@@ -21,6 +21,11 @@ library(latex2exp)
 
 + Plot the spiral
 ```{r}
+set.seed(1234)
+```
+
+
+```{r}
 n = 4000
 theta = seq(0, 8*pi, length.out=n)
 X = cbind((theta+4)^(0.7)*cos(theta), (theta+4)^(0.7)*sin(theta))
@@ -63,7 +68,7 @@ hk = exp(-geo_dis^2/2000)
 ```{r}
 p1 <- ggplot() + geom_point(aes(X[,1],X[,2],color=hk),size=0.5) +
   scale_color_gradientn(colours = c("blue","green","red")) +
-  xlab("") + ylab("") + ggtitle("") + labs(colour="") +
+  xlab("") + ylab("") + ggtitle("Heat Kernel") + labs(colour="") +
   theme(plot.title = element_text(hjust = 0.5),legend.key.width = unit(1.5, "cm"))
 
 p1 <- p1 + geom_text(aes(x=X[n_start,1],y=X[n_start,2],label="x"),hjust=2)
@@ -78,7 +83,7 @@ sek = exp(-euc_dis^2/60)
 ```{r}
 p2 <- ggplot() + geom_point(aes(X[,1],X[,2],color=sek),size=0.5) +
   scale_color_gradientn(colours = c("blue","green","red")) +
-  xlab("") + ylab("") + ggtitle("") +
+  xlab("") + ylab("") + ggtitle("Squared Exponential Kernel") +
   theme(plot.title = element_text(hjust = 0.5))
 
 p2 <- p2 + geom_text(aes(x=X[n_start,1],y=X[n_start,2],label="x"),hjust=2)
@@ -115,6 +120,7 @@ plot.cov = ggarrange(p0,p1,p2,p3,
 ggexport(plot.cov, filename = "plots/spiral/kernel.pdf")
 ```
 
+
 + Simulation
 ```{r}
 set.seed(1234)
@@ -136,7 +142,7 @@ m = 200
 train.index = sample.int(n,m); test.index = c(1:n)[-train.index]
 X.train = X[train.index,]; Y.train = Y[train.index]
 X.test = X[test.index,]; Y.test = Y[test.index]
-Yobs.train = Y.train + rnorm(m,0,1)
+Yobs.train = Y.train + rnorm(m,0,0.5)
 ```
 
 ```{r}
@@ -145,7 +151,30 @@ sqrt(sum((Y.test-mean(Yobs.train))^2)/(n-m))
 
 
 ```{r}
-s = 200; r = 3; K = 100
+s = 500; r = 3; K = 50
+models = list(subsample="kmeans", kernel="lae", gl="cluster-normalized", root=TRUE)
+```
+
++ LRFLGP
+
+```{r}
+models$subsample = "random"; models$gl = "normalized"
+t1 = Sys.time()
+res_pred_lrflag = fit_lae_regression_gp_rcpp(X.train,Yobs.train,X.test,s,r,K,models=models)
+t2 = Sys.time()
+t2-t1
+```
+
+```{r}
+Y_pred_lrflag = res_pred_lrflag$Y_pred
+mean((Y.test-Y_pred_lrflag$test)^2)
+```
+
+```{r}
+mean = cbind(res_pred_lrflag$posterior$mean)
+cov = cbind(res_pred_lrflag$posterior$cov)
+nll_lr = negative_log_likelihood(mean, cov, Y.test, "regression")
+nll_lr
 ```
 
 + LKFLGP
@@ -159,8 +188,21 @@ t2-t1
 
 ```{r}
 Y_pred_lkflag = res_pred_lkflag$Y_pred
-sqrt(sum((Y.test-Y_pred_lkflag$test)^2)/(n-m))
+mean((Yobs.train-Y_pred_lkflag$train)^2)
 ```
+
+```{r}
+Y_pred_lkflag = res_pred_lkflag$Y_pred
+mean((Y.test-Y_pred_lkflag$test)^2)
+```
+
+```{r}
+mean = cbind(res_pred_lkflag$posterior$mean)
+cov = cbind(res_pred_lkflag$posterior$cov)
+nll_lk = negative_log_likelihood(mean, cov, Y.test, "regression")
+nll_lk
+```
+
 
 ```{r}
 ggplot() + geom_point(aes(X.test[,1],X.test[,2],color=Y_pred_lkflag$test)) +
@@ -168,16 +210,80 @@ ggplot() + geom_point(aes(X.test[,1],X.test[,2],color=Y_pred_lkflag$test)) +
   geom_point(aes(X.train[,1],X.train[,2]),color="black", size=0.7)
 ```
 
++ SRFLGP
+
+```{r, include=FALSE}
+models$subsample = "random"; models$gl = "normalized"
+t1 = Sys.time()
+bandwidth_range = exp(seq(log(0.1),log(10),length.out=100))
+res_pred_srflag = fit_se_regression_gp_rcpp(X.train,Yobs.train,X.test,s,r,K,models=models,a2s=bandwidth_range)
+t2 = Sys.time()
+t2-t1
+```
+
+```{r}
+Y_pred_srflag = res_pred_srflag$Y_pred
+mean((Y.test-Y_pred_srflag$test)^2)
+```
+
+```{r}
+mean = cbind(res_pred_srflag$posterior$mean)
+cov = cbind(res_pred_srflag$posterior$cov)
+nll_sr = negative_log_likelihood(mean, cov, Y.test, "regression")
+nll_sr
+```
+
++ SKFLGP
+
+```{r, include=FALSE}
+models$subsample = "kmeans"; models$gl = "cluster-normalized"
+t1 = Sys.time()
+bandwidth_range = exp(seq(log(0.1),log(10),length.out=100))
+res_pred_skflag = fit_se_regression_gp_rcpp(X.train,Yobs.train,X.test,s,r,K,models=models,a2s=bandwidth_range)
+t2 = Sys.time()
+t2-t1
+```
+
+```{r}
+Y_pred_skflag = res_pred_skflag$Y_pred
+mean((Y.test-Y_pred_skflag$test)^2)
+```
+
+```{r}
+mean = cbind(res_pred_skflag$posterior$mean)
+cov = cbind(res_pred_skflag$posterior$cov)
+nll_sk = negative_log_likelihood(mean, cov, Y.test, "regression")
+nll_sk
+```
 
 + RBF
 
 ```{r}
 t1 = Sys.time()
-rbf.spiral = gausspr(X.train,Yobs.train)
+rbf.spiral = gausspr(X.train,Yobs.train,var=1e-1,variance.model=TRUE)
 Y_pred_rbf = predict(rbf.spiral, X.test)
 t2 = Sys.time()
 t2 - t1
-sqrt(sum((Y.test-Y_pred_rbf)^2)/(n-m))
+mean((Y.test-Y_pred_rbf)^2)
+```
+
+```{r}
+kernel = rbf.spiral@kernelf
+scale = rbf.spiral@scaling$x.scale
+X.train.scale = scale(X.train, scale$`scaled:center`, scale$`scaled:scale`)
+X.test.scale = scale(X.test, scale$`scaled:center`, scale$`scaled:scale`)
+C11 = kernelMatrix(kernel, X.train.scale) + diag(rep(1e-1,m))
+C21 = kernelMatrix(kernel, X.test.scale, X.train.scale)
+C22 = rep(1,n-m)
+cov = cbind(C22 - rowSums((C21%*%solve(C11))*C21))*rbf.spiral@scaling$y.scale$`scaled:scale`^2
+```
+
+
+```{r}
+mean = cbind(Y_pred_rbf)
+# cov = cbind(predict(rbf.spiral, X.test, type="sdeviation"))
+nll_rbf = negative_log_likelihood(mean, cov, Y.test, "regression")
+nll_rbf
 ```
 
 ```{r}
