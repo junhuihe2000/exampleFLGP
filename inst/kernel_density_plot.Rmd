@@ -9,6 +9,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+
 ```{r}
 library(FLGP)
 library(kernlab)
@@ -20,7 +21,7 @@ library(RSpectra)
 ```
 
 ```{r}
-mypath = "G:/Rtext/Rstudio/exampleFLGP/inst/plots/kernel density"
+output_path = "plots/kernel density"
 ```
 
 
@@ -29,7 +30,7 @@ mypath = "G:/Rtext/Rstudio/exampleFLGP/inst/plots/kernel density"
 ```{r}
 # generate data
 set.seed(1234)
-n = 1000
+n = 6000
 l = floor(n/2) + 1
 theta = seq(0, 2*pi, length.out=n)
 theta_ref = theta[l]
@@ -37,7 +38,7 @@ x = cbind(cos(theta), sin(theta))
 ```
 
 ```{r}
-ggplot() + geom_path(aes(x[,1],x[,2]), color="gray") +
+ggplot() + geom_path(aes(x[,1],x[,2])) +
   xlab("") + ylab("") + ggtitle("")
 ```
 
@@ -57,54 +58,36 @@ y_hk = compute_heat_kernel(theta-theta_ref, t)
 ```
 
 ```{r}
-p = ggplot() + geom_path(aes(theta,y_hk), color="red", lwd=1) +
+p = ggplot() + geom_path(aes(theta,y_hk), color="red", lwd=0.75) +
   xlab(TeX("$0\\leq \\theta \\leq 2\\pi$")) + ylab("Kernel Density") + ggtitle("")
 p
-```
-
-
-+ squared exponential kernel
-
-```{r}
-euclidean_dist = c()
-for(i in 1:n) {
-  euclidean_dist = c(euclidean_dist, sqrt(sum((x[i,]-x[l,])^2)))
-  # euclidean_dist = c(euclidean_dist, sqrt(sum((theta[i]-theta[l])^2)))
-}
-y_se = 1/sqrt(4*pi*t) * exp(-euclidean_dist^2/(4*t))
-```
-
-
-```{r}
-p + geom_path(aes(theta,y_se), color="yellow")
 ```
 
 + Fast graph Laplacian estimation
 
 ```{r}
-s = 200; r = 10; K = 40
-bw = 0.05
+s = 200; r = 10
+Ks = c(20, 25, 30, 40)
+bw = 0.08
 models = list(subsample = "kmeans", kernel = "se", gl = "cluster-normalized", root =
     TRUE)
-cov_fgl = heat_kernel_covariance_rcpp(x[l,,drop=FALSE], x[-l,], s, r, t/bw^2, K, models, bw, nstart = 5)
-y_fgl = rep(NA, n)
-y_fgl[l] = cov_fgl[1]
-y_fgl[-l] = cov_fgl[-1]
+alpha = bw / asin(bw/2) * pi
 ```
+
 
 ```{r}
-max(y_fgl)
-# scale the kernel estimation
-y_fgl = y_fgl/y_fgl[l]/sqrt(4*pi*t)
-# y_fgl = y_fgl/ max(y_fgl) * 6
+for (K in Ks) {
+  # calculate the heat kernel estimation
+  cov_fgl = c(heat_kernel_covariance_rcpp(x[l,,drop=FALSE], x[-l,], s, r, t/bw^2, K, models, bw, nstart = 5)) / alpha
+  y_fgl = rep(NA, n)
+  y_fgl[l] = cov_fgl[1]; y_fgl[-l] = cov_fgl[-1]
+  # plot
+  p_flgp = p + geom_path(aes(theta,y_fgl), color="steelblue", lwd=0.75, linetype="solid")
+  ggsave(filename=file.path(output_path, paste0("K=",K,"_revision.pdf")), p_flgp, width=5, height=5)
+}
 ```
 
-```{r}
-p + geom_path(aes(theta,y_fgl), color="steelblue", lwd=1)
-# ggsave(filename=file.path(mypath, paste0("K=",K,"_r=",r,"_hk.pdf")), p, width=5, height=5)
-```
-
-+ Graph Laplacian 
++ Graph Laplacian Gaussian Process
 
 ```{r}
 GL <- function(x, t, K, bandwidth, l) {
@@ -126,37 +109,12 @@ GL <- function(x, t, K, bandwidth, l) {
 
 ```{r}
 K = 40
-bw = 0.05
-y_gl = GL(x, t, K, bw, l)
-```
-
-```{r}
-max(y_gl)
-# scale the kernel estimation
-y_gl = y_gl/y_gl[l]/sqrt(4*pi*t)
-# y_gl = y_gl / max(y_gl) * 6
+bw = 0.08
+alpha = bw / asin(bw/2) * pi
+y_gl = GL(x, t, K, bw, l) / alpha
 ```
 
 ```{r}
 p + geom_path(aes(theta,y_gl), color="orange", lwd=1) + 
   xlab(TeX("$0\\leq \\theta \\leq 2\\pi$")) + ylab("Kernel Density") + ggtitle("")
 ```
-
-+ Fast graph Laplacian estimation
-
-```{r}
-s = 200; r = 10
-models = list(subsample = "kmeans", kernel = "se", gl = "cluster-normalized", root =
-    TRUE)
-cov_fgl = heat_kernel_covariance_rcpp(x[l,,drop=FALSE], x[-l,], s, r, t/bw^2, K, models, bw)
-y_fgl = rep(NA, n)
-y_fgl[l] = cov_fgl[1]
-y_fgl[-l] = cov_fgl[-1]
-```
-
-```{r}
-p = p + geom_path(aes(theta,y_fgl), color="steelblue", lwd=1.5, linetype="dashed")
-ggsave(filename=file.path(mypath, paste0("K=",K,"_r=",r,"_gl.pdf")), p, width=5, height=5)
-p
-```
-
