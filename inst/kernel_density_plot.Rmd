@@ -21,7 +21,7 @@ library(RSpectra)
 ```
 
 ```{r}
-output_path = "plots/kernel density"
+output_path = "plots/kernel density revision"
 ```
 
 
@@ -68,7 +68,7 @@ p
 ```{r}
 s = 200; r = 10
 Ks = c(20, 25, 30, 40)
-bw = 0.08
+bws = c(0.02, 0.08)
 models = list(subsample = "kmeans", kernel = "se", gl = "cluster-normalized", root =
     TRUE)
 alpha = bw / asin(bw/2) * pi
@@ -77,13 +77,15 @@ alpha = bw / asin(bw/2) * pi
 
 ```{r}
 for (K in Ks) {
-  # calculate the heat kernel estimation
-  cov_fgl = c(heat_kernel_covariance_rcpp(x[l,,drop=FALSE], x[-l,], s, r, t/bw^2, K, models, bw, nstart = 5)) / alpha
-  y_fgl = rep(NA, n)
-  y_fgl[l] = cov_fgl[1]; y_fgl[-l] = cov_fgl[-1]
-  # plot
-  p_flgp = p + geom_path(aes(theta,y_fgl), color="steelblue", lwd=0.75, linetype="solid")
-  ggsave(filename=file.path(output_path, paste0("K=",K,"_revision.pdf")), p_flgp, width=5, height=5)
+  for (bw in bws) {
+    # calculate the heat kernel estimation
+    cov_fgl = c(heat_kernel_covariance_rcpp(x[l,,drop=FALSE], x[-l,], s, r, t/bw^2, K, models, bw, nstart = 5)) / alpha
+    y_fgl = rep(NA, n)
+    y_fgl[l] = cov_fgl[1]; y_fgl[-l] = cov_fgl[-1]
+    # plot
+    p_flgp = p + geom_path(aes(theta,y_fgl), color="steelblue", lwd=0.75, linetype="solid")
+    ggsave(filename=file.path(output_path, paste0("K=",K,"_bwd=",bw,".pdf")), p_flgp, width=5, height=5)
+  }
 }
 ```
 
