@@ -109,6 +109,50 @@ test.index = c(1:n)[-train.index]
 X.train = X[train.index,]; X.test = X[test.index,]
 y.train = y[train.index]; y.test = y[test.index]
 
+# radial basis kernel function
+score_var <- function(log_var) {
+  gp = gausspr(x=X.train, y=y.train, scaled=FALSE, var=exp(log_var))
+  # compute rbf kernel matrix
+  K_noise = kernelMatrix(gp@kernelf, X.train) + diag(exp(log_var), m)
+  R = chol(K_noise)
+  alpha = forwardsolve(t(R), y.train)
+  alpha = backsolve(R, alpha)
+  logdet = 2 * sum(log(diag(R)))
+
+  nmll_gp = 0.5 * (crossprod(y.train, alpha) + logdet)
+  return(nmll_gp)
+}
+
+opt = optimize(score_var, interval = log(c(1e-2, 3)), tol = 1e-2)
+var <- exp(opt$minimum)
+
+t1 = Sys.time()
+# var = res_lkflag.hcp$pars[2] + 5e-3
+rbf.hcp = gausspr(x=X.train, y=y.train, scaled=FALSE, var=var, variance.model=TRUE)
+train_pred.hcp = predict(rbf.hcp, X.train)
+test_pred.hcp = predict(rbf.hcp, X.test)
+t2 = Sys.time()
+mset.rbf = mean((y.train-train_pred.hcp)^2)
+mset[1,num_exp,i] = mset.rbf
+idx.rbf = order((y.test-test_pred.hcp)^2)[round((n-m)*a):round((n-m)*(1-a))]
+mse.rbf.win = mean(((y.test-test_pred.hcp)^2)[idx.rbf])
+# mse.rbf.win = mean(sort((y.test-test_pred.hcp)^2)[round((n-m)*a):round((n-m)*(1-a))])
+mse[1,num_exp,i] = mse.rbf.win
+
+mean = cbind(test_pred.hcp[idx.rbf])
+# cov = cbind(predict(rbf.hcp, X.test, type="variance")[idx.rbf] + var)
+
+kernel = rbf.hcp@kernelf
+C11 = kernelMatrix(kernel, X.train) + diag(rep(var,m))
+C21 = kernelMatrix(kernel, X.test, X.train)
+C22 = rep(1+var,n-m)
+cov = cbind((C22 - rowSums((C21%*%solve(C11))*C21))[idx.rbf])
+
+nll.rbf = negative_log_likelihood(mean, cov, y.test[idx.rbf], "regression")
+nll[1,num_exp,i] = nll.rbf
+
+time[1,num_exp,i] = as.numeric(t2-t1, units="hours")*3600
+
 
 # Nystrom extension
 t1 = Sys.time()
@@ -175,50 +219,6 @@ nll[4,num_exp,i] = nll.lkflag
 
 time[4,num_exp,i] = as.numeric(t2-t1, units="hours")*3600
 
-# radial basis kernel function
-score_var <- function(log_var) {
-gp = gausspr(x=X.train, y=y.train, scaled=FALSE, var=exp(log_var))
-# compute rbf kernel matrix
-K_noise = kernelMatrix(gp@kernelf, X.train) + diag(exp(log_var), m)
-R = chol(K_noise)
-alpha = forwardsolve(t(R), y.train)
-alpha = backsolve(R, alpha)
-logdet = 2 * sum(log(diag(R)))
-
-nmll = 0.5 * (crossprod(y.train, alpha) + logdet)
-return(nmll)
-}
-
-opt = optimize(score_var, interval = log(c(1e-3, 5)), tol = 1e-2)
-var <- exp(opt$minimum)
-var
-
-t1 = Sys.time()
-# var = res_lkflag.hcp$pars[2] + 5e-3
-rbf.hcp = gausspr(x=X.train, y=y.train, scaled=FALSE, var=var, variance.model=TRUE)
-train_pred.hcp = predict(rbf.hcp, X.train)
-test_pred.hcp = predict(rbf.hcp, X.test)
-t2 = Sys.time()
-mset.rbf = mean((y.train-train_pred.hcp)^2)
-mset[1,num_exp,i] = mset.rbf
-idx.rbf = order((y.test-test_pred.hcp)^2)[round((n-m)*a):round((n-m)*(1-a))]
-mse.rbf.win = mean(((y.test-test_pred.hcp)^2)[idx.rbf])
-# mse.rbf.win = mean(sort((y.test-test_pred.hcp)^2)[round((n-m)*a):round((n-m)*(1-a))])
-mse[1,num_exp,i] = mse.rbf.win
-
-mean = cbind(test_pred.hcp[idx.rbf])
-# cov = cbind(predict(rbf.hcp, X.test, type="variance")[idx.rbf] + var)
-
-kernel = rbf.hcp@kernelf
-C11 = kernelMatrix(kernel, X.train) + diag(rep(var,m))
-C21 = kernelMatrix(kernel, X.test, X.train)
-C22 = rep(1+var,n-m)
-cov = cbind((C22 - rowSums((C21%*%solve(C11))*C21))[idx.rbf])
-
-nll.rbf = negative_log_likelihood(mean, cov, y.test[idx.rbf], "regression")
-nll[1,num_exp,i] = nll.rbf
-
-time[1,num_exp,i] = as.numeric(t2-t1, units="hours")*3600
 
 
 gc()
@@ -257,11 +257,6 @@ print(time_end-time_start)
 res_lkflag.hcp$pars
 mse.lkflag.win
 nll.lkflag
-```
-
-```{r}
-mse.rbf.win
-nll.rbf
 ```
 
 ```{r}

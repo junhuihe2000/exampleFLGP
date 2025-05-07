@@ -84,7 +84,7 @@ for (K in Ks) {
     y_fgl[l] = cov_fgl[1]; y_fgl[-l] = cov_fgl[-1]
     # plot
     p_flgp = p + geom_path(aes(theta,y_fgl), color="steelblue", lwd=1, linetype="solid")
-    ggsave(filename=file.path(output_path, paste0("K=",K,"_bwd=",bw,".pdf")), p_flgp, width=5, height=5)
+    ggsave(filename=file.path(output_path, paste0("K=",K,"_bwd=",bw,".png")), p_flgp, width=5, height=5)
   }
 }
 ```
@@ -109,14 +109,15 @@ GL <- function(x, t, K, bandwidth, l) {
 }
 ```
 
-```{r}
-K = 40
-bw = 0.08
-alpha = bw / asin(bw/2) * pi
-y_gl = GL(x, t, K, bw, l) / alpha
-```
 
 ```{r}
-p + geom_path(aes(theta,y_gl), color="orange", lwd=1) + 
-  xlab(TeX("$0\\leq \\theta \\leq 2\\pi$")) + ylab("Kernel Density") + ggtitle("")
+for (K in Ks) {
+  for (bw in bws) {
+    # calculate the heat kernel estimation
+    y_gl = GL(x, t, K, bw, l) / alpha
+    # plot
+    p_glgp = p + geom_path(aes(theta,y_gl), color="darkorange", lwd=1, linetype="solid")
+    ggsave(filename=file.path(output_path, paste0("K=",K,"_bwd=",bw,"_gl.png")), p_glgp, width=5, height=5)
+  }
+}
 ```
