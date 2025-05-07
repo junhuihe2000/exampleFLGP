@@ -19,28 +19,27 @@ library(ggplot2)
 set.seed(42)
 m = 200
 x_train = sort(runif(m, -3, 3))
-y_train = sin(x) + rnorm(m, 0, 0.1)
+y_train = sin(x_train) + rnorm(m, 0, 0.4)
 ```
 
 ```{r}
 # maximum likelihood estimation for noise variance
-score_var <- function(log_v) {
+score_var <- function(log_v, x_train, y_train) {
   # fit with noise variance = v
   gp <- gausspr(x_train, y_train, scaled = FALSE, 
                 kernel = "rbfdot", kpar = "automatic", var = exp(log_v))
   # compute rbf kernel matrix
   K = kernelMatrix(gp@kernelf, cbind(x_train)) + diag(exp(log_v), m)
-  L = chol(K)
-  alpha = forwardsolve(L, y_train)
-  alpha = backsolve(t(L), alpha)
-  logdet = 2 * sum(log(diag(L)))
+  R = chol(K)
+  alpha = forwardsolve(t(R), y_train)
+  alpha = backsolve(R, alpha)
+  logdet = 2 * sum(log(diag(R)))
   
   nll = 0.5 * (crossprod(y_train, alpha) + logdet)
-  cat(paste("v =", exp(log_v), "nll =", nll), "\n")
   return(nll)
 }
 
-opt = optimize(score_var, interval = c(-10, 1))
+opt = optimize(score_var, interval = c(-5, 1), tol = 1e-2, x_train = x_train, y_train = y_train)
 best_var <- opt$minimum
 # opt = optim(c(1e-2), score_var)
 # best_var = opt$par
@@ -50,33 +49,7 @@ cat("Optimal noise variance =", exp(best_var), "\n")
 
 ```{r}
 # perform regression
-var_n = 0.01
-gp_fit = gausspr(x_train, y_train, scaled = FALSE, kernel = "rbfdot", kpar = "automatic", variance.model = TRUE, var = var_n)
-
-gp_fit
-
-# Prediction grid
-xp <- seq(-3, 3, length.out = 200)
-pred <- predict(gp_fit, xp, type = "response")
-se   <- predict(gp_fit, xp, type = "sdeviation")
-
-# Combine
-out <- data.frame(x = xp,
-                  mean = pred,
-                  upper = pred + 2*se,
-                  lower = pred - 2*se)
-
-# Plot
-ggplot() +
-  geom_point(aes(x_train, y_train), size = 1.5) +
-  geom_line(data = out, aes(x, mean), color = "blue") +
-  geom_ribbon(data = out, aes(x, ymin = lower, ymax = upper), alpha = 0.2) +
-  labs(title = "GP regression (kernlab)", y = "y", x = "x")
-```
-
-```{r}
-# perform regression
-var_n = 0.1
+var_n = exp(best_var)
 gp_fit = gausspr(x_train, y_train, scaled = FALSE, kernel = "rbfdot", kpar = "automatic", variance.model = TRUE, var = var_n)
 
 gp_fit

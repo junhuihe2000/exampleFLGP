@@ -48,10 +48,26 @@ if (sum(act_idx) > 5000) {
       test.index = c(1:n)[-train.index]
       X.train = X[train.index,]; X.test = X[test.index,]
       y.train = y[train.index]; y.test = y[test.index]
-          
+
       # radial basis kernel function
+      score_var <- function(log_var) {
+        gp = gausspr(x=X.train, y=y.train, scaled=FALSE, var=exp(log_var))
+        # compute rbf kernel matrix
+        K_noise = kernelMatrix(gp@kernelf, X.train) + diag(exp(log_var), m)
+        R = chol(K_noise)
+        alpha = forwardsolve(t(R), y.train)
+        alpha = backsolve(R, alpha)
+        logdet = 2 * sum(log(diag(R)))
+
+        nmll_gp = 0.5 * (crossprod(y.train, alpha) + logdet)
+        return(nmll_gp)
+      }
+
+      opt = optimize(score_var, interval = log(c(1e-2, 3)), tol = 1e-2)
+      var <- exp(opt$minimum)
+
       t1 = Sys.time()
-      var = 3e-2
+      # var = res_lkflag.hcp$pars[2] + 5e-3
       rbf.hcp = gausspr(x=X.train, y=y.train, scaled=FALSE, var=var, variance.model=TRUE)
       train_pred.hcp = predict(rbf.hcp, X.train)
       test_pred.hcp = predict(rbf.hcp, X.test)
@@ -62,19 +78,21 @@ if (sum(act_idx) > 5000) {
       mse.rbf.win = mean(((y.test-test_pred.hcp)^2)[idx.rbf])
       # mse.rbf.win = mean(sort((y.test-test_pred.hcp)^2)[round((n-m)*a):round((n-m)*(1-a))])
       mse[1,num_exp,i] = mse.rbf.win
-    
+
       mean = cbind(test_pred.hcp[idx.rbf])
-      # cov = cbind(predict(rbf.hcp, X.test, type="variance")[idx.rbf])
+      # cov = cbind(predict(rbf.hcp, X.test, type="variance")[idx.rbf] + var)
+
       kernel = rbf.hcp@kernelf
       C11 = kernelMatrix(kernel, X.train) + diag(rep(var,m))
       C21 = kernelMatrix(kernel, X.test, X.train)
       C22 = rep(1+var,n-m)
       cov = cbind((C22 - rowSums((C21%*%solve(C11))*C21))[idx.rbf])
+
       nll.rbf = negative_log_likelihood(mean, cov, y.test[idx.rbf], "regression")
       nll[1,num_exp,i] = nll.rbf
-    
+
       time[1,num_exp,i] = as.numeric(t2-t1, units="hours")*3600
-    
+
       # Nystrom extension
       t1 = Sys.time()
       res_nystrom.hcp = fit_nystrom_regression_gp_rcpp(X.train, y.train, X.test, s, K, sigma = 5e-3)
@@ -88,14 +106,14 @@ if (sum(act_idx) > 5000) {
       mse.nystrom.win = mean(((y.test-test_pred_nystrom.hcp)^2)[idx.nystrom])
       # mse.nystrom.win = mean(sort((y.test-test_pred_nystrom.hcp)^2)[round((n-m)*a):round((n-m)*(1-a))])
       mse[2,num_exp,i] = mse.nystrom.win
-    
+
       mean = cbind(res_nystrom.hcp$posterior$mean[idx.nystrom])
       cov = cbind(res_nystrom.hcp$posterior$cov[idx.nystrom])
       nll.nystrom = negative_log_likelihood(mean, cov, y.test[idx.nystrom], "regression")
       nll[2,num_exp,i] = nll.nystrom
-    
+
       time[2,num_exp,i] = as.numeric(t2-t1, units="hours")*3600
-    
+
       # SKFLGP
       models$subsample = "kmeans"; models$gl = "cluster-normalized"
       t1 = Sys.time()
@@ -110,14 +128,14 @@ if (sum(act_idx) > 5000) {
       mse.skflag.win = mean(((y.test-test_pred_skflag.hcp)^2)[idx.skflag])
       # mse.lkflag.win = mean(sort((y.test-test_pred_lkflag.hcp)^2)[round((n-m)*a):round((n-m)*(1-a))])
       mse[3,num_exp,i] = mse.skflag.win
-      
+
       mean = cbind(res_skflag.hcp$posterior$mean[idx.skflag])
       cov = cbind(res_skflag.hcp$posterior$cov[idx.skflag])
       nll.skflag = negative_log_likelihood(mean, cov, y.test[idx.skflag], "regression")
       nll[3,num_exp,i] = nll.skflag
-    
+
       time[3,num_exp,i] = as.numeric(t2-t1, units="hours")*3600
-    
+
       # LKFLGP
       models$subsample = "kmeans"; models$gl = "cluster-normalized"
       t1 = Sys.time()
@@ -132,13 +150,15 @@ if (sum(act_idx) > 5000) {
       mse.lkflag.win = mean(((y.test-test_pred_lkflag.hcp)^2)[idx.lkflag])
       # mse.lkflag.win = mean(sort((y.test-test_pred_lkflag.hcp)^2)[round((n-m)*a):round((n-m)*(1-a))])
       mse[4,num_exp,i] = mse.lkflag.win
-    
+
       mean = cbind(res_lkflag.hcp$posterior$mean[idx.lkflag])
       cov = cbind(res_lkflag.hcp$posterior$cov[idx.lkflag])
       nll.lkflag = negative_log_likelihood(mean, cov, y.test[idx.lkflag], "regression")
       nll[4,num_exp,i] = nll.lkflag
-      
+
       time[4,num_exp,i] = as.numeric(t2-t1, units="hours")*3600
+
+
       gc()
     }
   }
